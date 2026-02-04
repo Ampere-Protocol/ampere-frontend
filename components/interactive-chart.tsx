@@ -8,7 +8,6 @@ import { motion } from "framer-motion";
 interface InteractiveChartProps {
   pair: string;
   timeframe: string;
-  priceMode: string;
   chartType: "candlestick" | "line";
   indicators: string[];
 }
@@ -102,7 +101,7 @@ function calculateBollingerBands(data: CandleData[], period: number = 20): { upp
   };
 }
 
-export function InteractiveChart({ pair, timeframe, priceMode, chartType, indicators }: InteractiveChartProps) {
+export function InteractiveChart({ pair, timeframe, chartType, indicators }: InteractiveChartProps) {
   const [hoveredCandle, setHoveredCandle] = useState<number | null>(null);
   const [zoomLevel, setZoomLevel] = useState(1);
   const [panOffset, setPanOffset] = useState(0);
@@ -110,7 +109,7 @@ export function InteractiveChart({ pair, timeframe, priceMode, chartType, indica
   const [dragStart, setDragStart] = useState({ x: 0, offset: 0 });
   const chartRef = useRef<SVGSVGElement>(null);
   
-  const allCandles = useMemo(() => generateCandleData(200), [pair, timeframe, priceMode]);
+  const allCandles = useMemo(() => generateCandleData(200), [pair, timeframe]);
   
   // Calculate visible range based on zoom and pan
   const visibleCount = Math.floor(50 / zoomLevel);

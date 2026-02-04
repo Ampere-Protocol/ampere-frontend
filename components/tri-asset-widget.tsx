@@ -85,7 +85,7 @@ export function TriAssetWidget() {
           }}
         />
       </svg>
-      <p className="mt-1 text-center text-[9px] text-muted-foreground">Tri-Asset State</p>
+      <p className="mt-1 text-center text-[9px] text-muted-foreground">Ampere State</p>
     </motion.div>
   );
 }

@@ -8,7 +8,7 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'TriSwap | Decentralized Tri-Asset Trading',
+  title: 'Ampere | Decentralized Tri-Asset Trading',
   description: 'Trade between three assets with a unique tri-asset decentralized exchange',
   generator: 'v0.app',
   icons: {

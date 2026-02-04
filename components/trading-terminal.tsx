@@ -31,12 +31,10 @@ const indicatorOptions = [
 
 export function TradingTerminal({ pair, onBack }: TradingTerminalProps) {
   const [selectedTimeframe, setSelectedTimeframe] = useState("1h");
-  const [priceMode, setPriceMode] = useState(pair.split("/")[1]);
   const [chartType, setChartType] = useState<"candlestick" | "line">("candlestick");
   const [selectedIndicators, setSelectedIndicators] = useState<string[]>([]);
 
   const [tokenA, tokenB] = pair.split("/");
-  const allTokens = ["A", "B", "C"];
 
   // Generate mock data
   const marketData = useMemo(() => ({
@@ -241,21 +239,6 @@ export function TradingTerminal({ pair, onBack }: TradingTerminalProps) {
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
-
-                {/* Price mode */}
-                <div className="flex items-center gap-1 rounded-lg border border-border p-1">
-                  {allTokens.map((token) => (
-                    <Button
-                      key={token}
-                      variant={priceMode === token ? "secondary" : "ghost"}
-                      size="sm"
-                      onClick={() => setPriceMode(token)}
-                      className="h-6 px-2 text-xs"
-                    >
-                      Price in {token}
-                    </Button>
-                  ))}
-                </div>
               </div>
 
               {/* Active indicators legend */}
@@ -280,7 +263,6 @@ export function TradingTerminal({ pair, onBack }: TradingTerminalProps) {
                 <InteractiveChart
                   pair={pair}
                   timeframe={selectedTimeframe}
-                  priceMode={priceMode}
                   chartType={chartType}
                   indicators={selectedIndicators}
                 />

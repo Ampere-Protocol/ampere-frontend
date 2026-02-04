@@ -21,7 +21,7 @@ export function Navigation({ onNavigate, currentPage = "home" }: NavigationProps
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
             <Triangle className="h-4 w-4 text-primary-foreground" />
           </div>
-          <span className="text-xl font-semibold text-foreground">TriSwap</span>
+          <span className="text-xl font-semibold text-foreground">Ampere</span>
         </button>
 
         <nav className="hidden items-center gap-1 md:flex">
