@@ -10,6 +10,7 @@ interface InteractiveChartProps {
   timeframe: string;
   chartType: "candlestick" | "line";
   indicators: string[];
+  isInverted?: boolean;
 }
 
 interface CandleData {
@@ -101,7 +102,23 @@ function calculateBollingerBands(data: CandleData[], period: number = 20): { upp
   };
 }
 
-export function InteractiveChart({ pair, timeframe, chartType, indicators }: InteractiveChartProps) {
+// Helper function to format price with appropriate precision
+function formatPrice(price: number): string {
+  if (Math.abs(price) < 0.001) {
+    return price.toPrecision(4);
+  } else if (Math.abs(price) < 0.01) {
+    return price.toFixed(6);
+  } else if (Math.abs(price) < 0.1) {
+    return price.toFixed(5);
+  } else if (Math.abs(price) < 1) {
+    return price.toFixed(4);
+  } else if (Math.abs(price) < 10) {
+    return price.toFixed(3);
+  }
+  return price.toFixed(2);
+}
+
+export function InteractiveChart({ pair, timeframe, chartType, indicators, isInverted = false }: InteractiveChartProps) {
   const [hoveredCandle, setHoveredCandle] = useState<number | null>(null);
   const [zoomLevel, setZoomLevel] = useState(1);
   const [panOffset, setPanOffset] = useState(0);
@@ -109,7 +126,20 @@ export function InteractiveChart({ pair, timeframe, chartType, indicators }: Int
   const [dragStart, setDragStart] = useState({ x: 0, offset: 0 });
   const chartRef = useRef<SVGSVGElement>(null);
   
-  const allCandles = useMemo(() => generateCandleData(200), [pair, timeframe]);
+  const rawCandles = useMemo(() => generateCandleData(200), [pair, timeframe]);
+  
+  // Invert candle data when pair is inverted (flip OHLC values)
+  const allCandles = useMemo(() => {
+    if (!isInverted) return rawCandles;
+    return rawCandles.map(candle => ({
+      open: 1 / candle.open,
+      close: 1 / candle.close,
+      high: 1 / candle.low, // Inverted high becomes 1/low
+      low: 1 / candle.high, // Inverted low becomes 1/high
+      volume: candle.volume,
+      timestamp: candle.timestamp,
+    }));
+  }, [rawCandles, isInverted]);
   
   // Calculate visible range based on zoom and pan
   const visibleCount = Math.floor(50 / zoomLevel);
@@ -127,8 +157,13 @@ export function InteractiveChart({ pair, timeframe, chartType, indicators }: Int
     lower: calculateBollingerBands(allCandles).lower.slice(startIdx, startIdx + visibleCount),
   } : null, [allCandles, indicators, startIdx, visibleCount]);
   
-  const minPrice = Math.min(...candles.map(c => c.low)) - 5;
-  const maxPrice = Math.max(...candles.map(c => c.high)) + 5;
+  // Calculate price range with percentage-based padding for proper scaling at any price level
+  const rawMinPrice = Math.min(...candles.map(c => c.low));
+  const rawMaxPrice = Math.max(...candles.map(c => c.high));
+  const rawPriceRange = rawMaxPrice - rawMinPrice;
+  const padding = rawPriceRange * 0.1; // 10% padding on each side
+  const minPrice = rawMinPrice - padding;
+  const maxPrice = rawMaxPrice + padding;
   const priceRange = maxPrice - minPrice;
   
   const chartHeight = 300;
@@ -143,8 +178,20 @@ export function InteractiveChart({ pair, timeframe, chartType, indicators }: Int
   const priceLabels = useMemo(() => {
     const labels = [];
     const step = priceRange / 5;
+    // Determine appropriate precision based on price magnitude
+    const samplePrice = minPrice + step * 2.5;
+    let decimals = 2;
+    if (Math.abs(samplePrice) < 0.01) {
+      decimals = 6;
+    } else if (Math.abs(samplePrice) < 0.1) {
+      decimals = 5;
+    } else if (Math.abs(samplePrice) < 1) {
+      decimals = 4;
+    } else if (Math.abs(samplePrice) < 10) {
+      decimals = 3;
+    }
     for (let i = 0; i <= 5; i++) {
-      labels.push((minPrice + step * i).toFixed(2));
+      labels.push((minPrice + step * i).toFixed(decimals));
     }
     return labels;
   }, [minPrice, priceRange]);
@@ -441,13 +488,13 @@ export function InteractiveChart({ pair, timeframe, chartType, indicators }: Int
                 {new Date(candles[hoveredCandle].timestamp).toLocaleString()}
               </span>
               <span className="text-muted-foreground">Open</span>
-              <span className="font-mono text-foreground">{candles[hoveredCandle].open.toFixed(4)}</span>
+              <span className="font-mono text-foreground">{formatPrice(candles[hoveredCandle].open)}</span>
               <span className="text-muted-foreground">High</span>
-              <span className="font-mono text-foreground">{candles[hoveredCandle].high.toFixed(4)}</span>
+              <span className="font-mono text-foreground">{formatPrice(candles[hoveredCandle].high)}</span>
               <span className="text-muted-foreground">Low</span>
-              <span className="font-mono text-foreground">{candles[hoveredCandle].low.toFixed(4)}</span>
+              <span className="font-mono text-foreground">{formatPrice(candles[hoveredCandle].low)}</span>
               <span className="text-muted-foreground">Close</span>
-              <span className="font-mono text-foreground">{candles[hoveredCandle].close.toFixed(4)}</span>
+              <span className="font-mono text-foreground">{formatPrice(candles[hoveredCandle].close)}</span>
               <span className="text-muted-foreground">Volume</span>
               <span className="font-mono text-foreground">{candles[hoveredCandle].volume.toFixed(2)}</span>
             </div>

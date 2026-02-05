@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, TrendingUp, TrendingDown, LineChart, CableIcon as CandleIcon, Droplets, BarChart3, ChevronDown } from "lucide-react";
+import { ArrowLeft, TrendingUp, TrendingDown, LineChart, CableIcon as CandleIcon, Droplets, BarChart3, ChevronDown, ArrowLeftRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InteractiveChart } from "@/components/interactive-chart";
 import { TradePanel } from "@/components/trade-panel";
@@ -33,20 +33,54 @@ export function TradingTerminal({ pair, onBack }: TradingTerminalProps) {
   const [selectedTimeframe, setSelectedTimeframe] = useState("1h");
   const [chartType, setChartType] = useState<"candlestick" | "line">("candlestick");
   const [selectedIndicators, setSelectedIndicators] = useState<string[]>([]);
+  const [isInverted, setIsInverted] = useState(false);
 
-  const [tokenA, tokenB] = pair.split("/");
+  const [baseTokenA, baseTokenB] = pair.split("/");
+  const tokenA = isInverted ? baseTokenB : baseTokenA;
+  const tokenB = isInverted ? baseTokenA : baseTokenB;
+  const displayPair = `${tokenA}/${tokenB}`;
 
-  // Generate mock data
-  const marketData = useMemo(() => ({
-    lastPrice: (100 + Math.random() * 50).toFixed(4),
-    change24h: ((Math.random() - 0.5) * 10).toFixed(2),
-    volume24h: ((Math.random() * 10) + 1).toFixed(2),
-    liquidityA: ((Math.random() * 5) + 2).toFixed(2),
-    liquidityB: ((Math.random() * 8) + 3).toFixed(2),
-    high24h: (130 + Math.random() * 20).toFixed(4),
-    low24h: (90 + Math.random() * 10).toFixed(4),
+  // Generate base mock data (non-inverted)
+  const baseMarketData = useMemo(() => ({
+    lastPrice: 100 + Math.random() * 50,
+    change24h: (Math.random() - 0.5) * 10,
+    volume24h: (Math.random() * 10) + 1,
+    liquidityA: (Math.random() * 5) + 2,
+    liquidityB: (Math.random() * 8) + 3,
+    high24h: 130 + Math.random() * 20,
+    low24h: 90 + Math.random() * 10,
     trades24h: Math.floor(Math.random() * 10000) + 5000,
   }), [pair]);
+
+  // Apply inversion to market data
+  const marketData = useMemo(() => {
+    if (!isInverted) {
+      return {
+        lastPrice: baseMarketData.lastPrice.toFixed(4),
+        change24h: baseMarketData.change24h.toFixed(2),
+        volume24h: baseMarketData.volume24h.toFixed(2),
+        liquidityA: baseMarketData.liquidityA.toFixed(2),
+        liquidityB: baseMarketData.liquidityB.toFixed(2),
+        high24h: baseMarketData.high24h.toFixed(4),
+        low24h: baseMarketData.low24h.toFixed(4),
+        trades24h: baseMarketData.trades24h,
+      };
+    }
+    // Invert prices: 1/price, swap high/low, negate change
+    const invertedLastPrice = 1 / baseMarketData.lastPrice;
+    const invertedHigh = 1 / baseMarketData.low24h; // 1/low becomes high
+    const invertedLow = 1 / baseMarketData.high24h; // 1/high becomes low
+    return {
+      lastPrice: invertedLastPrice.toPrecision(4),
+      change24h: (-baseMarketData.change24h).toFixed(2), // Negate the change
+      volume24h: baseMarketData.volume24h.toFixed(2),
+      liquidityA: baseMarketData.liquidityB.toFixed(2), // Swap liquidity display
+      liquidityB: baseMarketData.liquidityA.toFixed(2),
+      high24h: invertedHigh.toPrecision(4),
+      low24h: invertedLow.toPrecision(4),
+      trades24h: baseMarketData.trades24h,
+    };
+  }, [baseMarketData, isInverted]);
 
   const isPositive = parseFloat(marketData.change24h) >= 0;
 
@@ -79,7 +113,18 @@ export function TradingTerminal({ pair, onBack }: TradingTerminalProps) {
                 <ArrowLeft className="h-5 w-5" />
               </Button>
               <div>
-                <h1 className="text-2xl font-bold text-foreground">{pair}</h1>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-2xl font-bold text-foreground">{displayPair}</h1>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setIsInverted(!isInverted)}
+                    className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                    title="Invert pair"
+                  >
+                    <ArrowLeftRight className="h-4 w-4" />
+                  </Button>
+                </div>
                 <p className="text-sm text-muted-foreground">Trading Pair</p>
               </div>
             </div>
@@ -261,21 +306,22 @@ export function TradingTerminal({ pair, onBack }: TradingTerminalProps) {
               {/* Chart area */}
               <div className="h-[450px]">
                 <InteractiveChart
-                  pair={pair}
+                  pair={displayPair}
                   timeframe={selectedTimeframe}
                   chartType={chartType}
                   indicators={selectedIndicators}
+                  isInverted={isInverted}
                 />
               </div>
             </div>
 
             {/* Account Panel - Balance, Recent Trades, Order History */}
-            <AccountPanel pair={pair} />
+            <AccountPanel pair={displayPair} />
           </div>
 
           {/* Right side - Trade panel */}
           <div className="lg:sticky lg:top-20 lg:h-fit">
-            <TradePanel pair={pair} />
+            <TradePanel pair={displayPair} />
           </div>
         </div>
       </div>
