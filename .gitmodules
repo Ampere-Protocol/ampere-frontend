@@ -1,0 +1,3 @@
+[submodule "ampere-protocol"]
+	path = ampere-protocol
+	url = https://github.com/Ampere-Protocol/ampere-protocol.git
