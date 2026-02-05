@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { SuiClient } from '@mysten/sui.js/client';
+import { TransactionBlock } from '@mysten/sui.js/transactions';
 import { useWallet } from '@suiet/wallet-kit';
 import { OrbitalSdk } from '@/ampere-protocol/src/sdk';
 import { createSdkConfig } from '@/ampere-protocol/src/sdk/config';
@@ -82,6 +83,10 @@ export function AmpereProvider({ children }: AmpereProviderProps) {
       const rpcUrl = NETWORK_CONFIG.testnet;
       const suiClient = new SuiClient({ url: rpcUrl });
       setClient(suiClient);
+
+      console.log('🌐 Connected to Sui network:', rpcUrl);
+      console.log('📦 Package ID:', AMPERE_CONFIG.packageId);
+      console.log('🏊 Pool ID:', AMPERE_CONFIG.poolId);
 
       const orbitalSdk = new OrbitalSdk(
         createSdkConfig({
@@ -176,9 +181,15 @@ export function AmpereProvider({ children }: AmpereProviderProps) {
       return { success: false, error: 'Wallet not connected' };
     }
 
+    console.log('🔄 Starting swap:', params);
+    console.log('📍 Pool ID:', AMPERE_CONFIG.poolId);
+    console.log('📍 Package ID:', AMPERE_CONFIG.packageId);
+
     try {
       const { coinInSymbol, amount, route } = params;
       const typeArgs = getPool3TypeArgs();
+      
+      console.log('🎯 Type arguments:', typeArgs);
       
       // Get coin type index
       let coinTypeIndex = 0;
@@ -186,39 +197,75 @@ export function AmpereProvider({ children }: AmpereProviderProps) {
       else if (coinInSymbol === 'SUI') coinTypeIndex = 2;
       
       const coinType = typeArgs[coinTypeIndex];
+      console.log(`💰 Looking for ${coinInSymbol} coins with type:`, coinType);
 
-      // Find coins to use for swap
-      const coins = await client.getCoins({
-        owner: wallet.account.address,
-        coinType: coinType,
-      });
+      // Create swap transaction using TransactionBlock (compatible with Suiet wallet)
+      console.log('🔨 Building transaction...');
+      const tx = new TransactionBlock();
+      
+      // Map route to function name
+      const routeFunctions: Record<SwapRoute, string> = {
+        'AtoB': 'swap_a_for_b_exact_in',
+        'BtoA': 'swap_b_for_a_exact_in',
+        'AtoC': 'swap_a_for_c_exact_in',
+        'CtoA': 'swap_c_for_a_exact_in',
+        'BtoC': 'swap_b_for_c_exact_in',
+        'CtoB': 'swap_c_for_b_exact_in',
+      };
+      
+      let coinInArg;
+      
+      // Handle SUI swaps differently - split from gas coin
+      if (coinInSymbol === 'SUI') {
+        console.log('🪙 Splitting SUI from gas coin');
+        // Convert amount to base units (SUI has 9 decimals)
+        const amountInBaseUnits = Math.floor(parseFloat(amount) * 1_000_000_000);
+        [coinInArg] = tx.splitCoins(tx.gas, [amountInBaseUnits]);
+      } else {
+        // For other tokens, find and use existing coins
+        const coins = await client.getCoins({
+          owner: wallet.account.address,
+          coinType: coinType,
+        });
 
-      if (coins.data.length === 0) {
-        return { success: false, error: `No ${coinInSymbol} coins available` };
+        console.log(`Found ${coins.data.length} ${coinInSymbol} coins`);
+
+        if (coins.data.length === 0) {
+          return { success: false, error: `No ${coinInSymbol} coins available` };
+        }
+
+        // Use the first coin
+        const coinIn = coins.data[0].coinObjectId;
+        console.log('🪙 Using coin:', coinIn);
+        coinInArg = tx.object(coinIn);
       }
+      
+      // Perform swap - returns the output coin
+      const [outputCoin] = tx.moveCall({
+        target: `${AMPERE_CONFIG.packageId}::orbital_pool3::${routeFunctions[route]}`,
+        typeArguments: typeArgs as string[],
+        arguments: [
+          tx.object(AMPERE_CONFIG.poolId),
+          coinInArg,
+        ],
+      });
+      
+      // Transfer the output coin to the sender to avoid "UnusedValueWithoutDrop" error
+      tx.transferObjects([outputCoin], wallet.account.address);
+      console.log('✅ Added transfer for output coin');
 
-      // Use the first coin (TODO: implement coin selection/merging)
-      const coinIn = coins.data[0].coinObjectId;
+      console.log('✍️ Signing and executing transaction...');
 
-      // Create swap transaction using SDK - swapExactInTx returns the Transaction with swap already added
-      const tx = sdk.pool3.swapExactInTx({
-        pool: {
-          objectId: AMPERE_CONFIG.poolId,
-          initialSharedVersion: AMPERE_CONFIG.poolSharedVersion,
-          mutable: true,
+      // Sign and execute with Suiet Wallet Kit using TransactionBlock
+      const result = await wallet.signAndExecuteTransactionBlock({
+        transactionBlock: tx,
+        options: {
+          showEffects: true,
+          showObjectChanges: true,
         },
-        coinIn,
-        route,
-        typeArgs,
       });
 
-      // Sign and execute with Suiet Wallet Kit
-      // Note: Using signAndExecuteTransaction (not signAndExecuteTransactionBlock) per Suiet v0.3.x+ API
-      const result = await wallet.signAndExecuteTransaction({
-        transaction: tx,
-      });
-
-      console.log('Transaction executed:', result);
+      console.log('✅ Transaction executed:', result);
 
       // Refresh balances after swap
       await refreshBalances();
@@ -228,7 +275,12 @@ export function AmpereProvider({ children }: AmpereProviderProps) {
         digest: result.digest,
       };
     } catch (error: any) {
-      console.error('Swap failed:', error);
+      console.error('❌ Swap failed:', error);
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        stack: error.stack,
+      });
       return {
         success: false,
         error: error.message || 'Swap execution failed',
