@@ -2,8 +2,12 @@
 
 import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
-import { Wallet, History, ClipboardList } from "lucide-react";
+import { Wallet, History, ClipboardList, RefreshCw } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { useAmpere } from "@/contexts/ampere-context";
+import { useWallet } from "@/contexts/wallet-context";
+import { AMPERE_CONFIG } from "@/lib/ampere-config";
 
 interface AccountPanelProps {
   pair: string;
@@ -11,6 +15,7 @@ interface AccountPanelProps {
 
 interface Balance {
   token: string;
+  name: string;
   available: number;
   inOrder: number;
   total: number;
@@ -39,18 +44,10 @@ interface Order {
   status: "open" | "partial" | "cancelled";
 }
 
-function generateBalances(): Balance[] {
-  return [
-    { token: "A", available: 1234.5678, inOrder: 100.0, total: 1334.5678, usdValue: 15420.45 },
-    { token: "B", available: 567.8901, inOrder: 50.0, total: 617.8901, usdValue: 8234.12 },
-    { token: "C", available: 2345.6789, inOrder: 200.0, total: 2545.6789, usdValue: 12890.67 },
-  ];
-}
-
 function generateRecentTrades(count: number): Trade[] {
   const trades: Trade[] = [];
   let basePrice = 124.5;
-  const pairs = ["A/B", "B/C", "A/C"];
+  const pairs = ["USDC/USDT", "USDT/SUI", "USDC/SUI"];
   
   for (let i = 0; i < count; i++) {
     const type = Math.random() > 0.5 ? "buy" : "sell";
@@ -78,7 +75,7 @@ function generateRecentTrades(count: number): Trade[] {
 function generateOrderHistory(count: number): Order[] {
   const orders: Order[] = [];
   let basePrice = 124.5;
-  const pairs = ["A/B", "B/C", "A/C"];
+  const pairs = ["USDC/USDT", "USDT/SUI", "USDC/SUI"];
   const statuses: ("open" | "partial" | "cancelled")[] = ["open", "partial", "cancelled"];
   
   for (let i = 0; i < count; i++) {
@@ -106,9 +103,31 @@ function generateOrderHistory(count: number): Order[] {
 }
 
 export function AccountPanel({ pair }: AccountPanelProps) {
-  const balances = useMemo(() => generateBalances(), []);
+  const { connected } = useWallet();
+  const { balances: ampereBalances, loading, refreshBalances, isConfigured } = useAmpere();
   const recentTrades = useMemo(() => generateRecentTrades(10), [pair]);
   const orderHistory = useMemo(() => generateOrderHistory(8), []);
+
+  // Convert Ampere balances to display format
+  const balances: Balance[] = useMemo(() => {
+    if (!connected || ampereBalances.length === 0) {
+      return [];
+    }
+
+    return ampereBalances
+      .filter(b => b.symbol !== 'LP') // Don't show LP token in main balance view
+      .map((b) => {
+        const tokenMeta = AMPERE_CONFIG.tokens[b.symbol];
+        return {
+          token: b.symbol,
+          name: tokenMeta.name,
+          available: b.formatted,
+          inOrder: 0, // TODO: Track in-order amounts
+          total: b.formatted,
+          usdValue: 0, // TODO: Calculate USD value
+        };
+      });
+  }, [ampereBalances, connected]);
 
   return (
     <div className="rounded-xl border border-border bg-card">
@@ -139,59 +158,87 @@ export function AccountPanel({ pair }: AccountPanelProps) {
 
         {/* Balance Tab */}
         <TabsContent value="balance" className="mt-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-border text-muted-foreground">
-                  <th className="px-3 py-2 text-left font-medium">Token</th>
-                  <th className="px-3 py-2 text-right font-medium">Available</th>
-                  <th className="px-3 py-2 text-right font-medium">In Order</th>
-                  <th className="px-3 py-2 text-right font-medium">Total</th>
-                  <th className="px-3 py-2 text-right font-medium">USD Value</th>
-                </tr>
-              </thead>
-              <tbody>
-                {balances.map((balance, index) => (
-                  <motion.tr
-                    key={balance.token}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    className="border-b border-border/50 last:border-0 hover:bg-secondary/30"
-                  >
-                    <td className="px-3 py-2">
-                      <div className="flex items-center gap-2">
-                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20 text-primary text-xs font-bold">
-                          {balance.token}
-                        </div>
-                        <span className="font-medium text-foreground">Token {balance.token}</span>
-                      </div>
-                    </td>
-                    <td className="px-3 py-2 text-right font-mono text-foreground">
-                      {balance.available.toFixed(4)}
-                    </td>
-                    <td className="px-3 py-2 text-right font-mono text-muted-foreground">
-                      {balance.inOrder.toFixed(4)}
-                    </td>
-                    <td className="px-3 py-2 text-right font-mono text-foreground font-medium">
-                      {balance.total.toFixed(4)}
-                    </td>
-                    <td className="px-3 py-2 text-right font-mono text-success">
-                      ${balance.usdValue.toLocaleString()}
-                    </td>
-                  </motion.tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="border-t border-border px-3 py-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Total Portfolio Value</span>
-              <span className="font-mono font-semibold text-foreground">
-                ${balances.reduce((sum, b) => sum + b.usdValue, 0).toLocaleString()}
-              </span>
+          {!isConfigured ? (
+            <div className="flex flex-col items-center justify-center py-12 px-6 text-center">
+              <div className="rounded-full bg-destructive/10 p-3 mb-3">
+                <Wallet className="h-8 w-8 text-destructive" />
+              </div>
+              <h3 className="font-semibold text-foreground mb-2">Configuration Required</h3>
+              <p className="text-sm text-muted-foreground mb-4 max-w-md">
+                Please set up your <code className="bg-muted px-1 py-0.5 rounded text-xs">.env.local</code> file with your deployed contract addresses.
+              </p>
+              <ol className="text-xs text-left text-muted-foreground space-y-1">
+                <li>1. Copy <code className="bg-muted px-1 py-0.5 rounded">.env.example</code> to <code className="bg-muted px-1 py-0.5 rounded">.env.local</code></li>
+                <li>2. Fill in your package ID, pool ID, and token addresses</li>
+                <li>3. Restart the development server</li>
+              </ol>
             </div>
-          </div>
+          ) : !connected ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <Wallet className="h-12 w-12 text-muted-foreground/50 mb-3" />
+              <p className="text-sm text-muted-foreground">Connect your wallet to view balances</p>
+            </div>
+          ) : loading ? (
+            <div className="flex items-center justify-center py-12">
+              <RefreshCw className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          ) : balances.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <p className="text-sm text-muted-foreground">No balances found</p>
+            </div>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-border text-muted-foreground">
+                      <th className="px-3 py-2 text-left font-medium">Token</th>
+                      <th className="px-3 py-2 text-right font-medium">Available</th>
+                      <th className="px-3 py-2 text-right font-medium">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {balances.map((balance, index) => (
+                      <motion.tr
+                        key={balance.token}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: index * 0.05 }}
+                        className="border-b border-border/50 last:border-0 hover:bg-secondary/30"
+                      >
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20 text-primary text-xs font-bold">
+                              {balance.token}
+                            </div>
+                            <span className="font-medium text-foreground">{balance.name}</span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 text-right font-mono text-foreground">
+                          {balance.available.toFixed(6)}
+                        </td>
+                        <td className="px-3 py-2 text-right font-mono text-foreground font-medium">
+                          {balance.total.toFixed(6)}
+                        </td>
+                      </motion.tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="border-t border-border px-3 py-2 flex items-center justify-between">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={refreshBalances}
+                  disabled={loading}
+                  className="h-7 text-xs"
+                >
+                  <RefreshCw className={`h-3 w-3 mr-1 ${loading ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
+              </div>
+            </>
+          )}
         </TabsContent>
 
         {/* Recent Trades Tab */}

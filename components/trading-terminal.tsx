@@ -321,7 +321,7 @@ export function TradingTerminal({ pair, onBack }: TradingTerminalProps) {
 
           {/* Right side - Trade panel */}
           <div className="lg:sticky lg:top-20 lg:h-fit">
-            <TradePanel pair={displayPair} />
+            <TradePanel pair={displayPair} isInverted={isInverted} />
           </div>
         </div>
       </div>

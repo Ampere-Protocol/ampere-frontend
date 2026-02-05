@@ -110,10 +110,21 @@ export function WalletProvider({ children }: WalletProviderProps) {
       console.log('Connected to wallet:', response.address);
     } catch (error: any) {
       console.error('Failed to connect wallet:', error);
+      
+      let errorMessage = 'Failed to connect wallet';
+      
       if (error.code === 4001) {
         // User rejected the request
-        console.log('User rejected the connection request');
+        errorMessage = 'User rejected the connection request';
+      } else if (error.code === -32603) {
+        // Internal error
+        errorMessage = 'Phantom wallet error. Please unlock your wallet and try again';
+      } else if (error.message) {
+        errorMessage = error.message;
       }
+      
+      console.log(errorMessage);
+      alert(`Connection failed: ${errorMessage}\n\nPlease:\n1. Unlock your Phantom wallet\n2. Make sure you're on the SUI network\n3. Refresh the page and try again`);
     } finally {
       setConnecting(false);
     }

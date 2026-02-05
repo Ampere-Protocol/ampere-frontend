@@ -18,16 +18,18 @@ export interface PhantomSuiProvider {
   requestAccount(): Promise<PhantomSuiAccount>;
   
   /**
-   * Sign and execute a transaction block
-   * @param transactionBlock - The transaction block to sign and execute
-   * @returns Promise resolving to the transaction result
+   * Sign a transaction (which also sends it to the network)
+   * @param params - Transaction parameters
+   * @returns Promise resolving to the signature
    */
-  signAndExecuteTransactionBlock(params: {
-    transactionBlock: any;
-    options?: {
-      requestType?: 'WaitForEffectsCert' | 'WaitForLocalExecution';
-    };
-  }): Promise<any>;
+  signTransaction(params: {
+    transaction: string; // JSON string from tx.toJSON()
+    address: string;
+    networkID: string; // e.g., 'sui:testnet' or 'sui:mainnet'
+  }): Promise<{
+    signature: string;
+    transactionBlockBytes: string;
+  }>;
   
   /**
    * Sign a message

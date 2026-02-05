@@ -9,9 +9,9 @@ interface TriangleSelectorProps {
 }
 
 const assets = {
-  A: { name: "Token A", color: "hsl(0, 0%, 100%)", liquidity: 45, volume: 35 },
-  B: { name: "Token B", color: "hsl(0, 0%, 100%)", liquidity: 30, volume: 40 },
-  C: { name: "Token C", color: "hsl(0, 0%, 100%)", liquidity: 25, volume: 25 },
+  A: { name: "USDC", color: "hsl(0, 0%, 100%)", liquidity: 45, volume: 35 },
+  B: { name: "USDT", color: "hsl(0, 0%, 100%)", liquidity: 30, volume: 40 },
+  C: { name: "SUI", color: "hsl(0, 0%, 100%)", liquidity: 25, volume: 25 },
 };
 
 export function TriangleSelector({ mode, onSelectPair }: TriangleSelectorProps) {
@@ -49,9 +49,9 @@ export function TriangleSelector({ mode, onSelectPair }: TriangleSelectorProps) 
   }, [mode]);
 
   const edges = [
-    { id: "A/B", from: "A", to: "B", pair: "A/B" },
-    { id: "B/C", from: "B", to: "C", pair: "B/C" },
-    { id: "A/C", from: "A", to: "C", pair: "A/C" },
+    { id: "USDC/USDT", from: "A", to: "B", pair: "USDC/USDT" },
+    { id: "USDT/SUI", from: "B", to: "C", pair: "USDT/SUI" },
+    { id: "USDC/SUI", from: "A", to: "C", pair: "USDC/SUI" },
   ];
 
   const getEdgeMidpoint = (from: string, to: string) => {
@@ -376,15 +376,15 @@ export function TriangleSelector({ mode, onSelectPair }: TriangleSelectorProps) 
       <div className="mt-6 flex items-center gap-6 text-xs text-muted-foreground">
         <div className="flex items-center gap-2">
           <div className="h-3 w-3 rounded-full" style={{ backgroundColor: assets.A.color }} />
-          <span>Token A</span>
+          <span>USDC</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="h-3 w-3 rounded-full" style={{ backgroundColor: assets.B.color }} />
-          <span>Token B</span>
+          <span>USDT</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="h-3 w-3 rounded-full" style={{ backgroundColor: assets.C.color }} />
-          <span>Token C</span>
+          <span>SUI</span>
         </div>
       </div>
     </div>
