@@ -2,8 +2,7 @@ import React from "react"
 import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
-import { WalletProvider } from '@/contexts/wallet-context'
-import { AmpereProvider } from '@/contexts/ampere-context'
+import { Providers } from '@/components/providers'
 import { Toaster } from '@/components/ui/toaster'
 import './globals.css'
 
@@ -41,12 +40,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`font-sans antialiased`}>
-        <WalletProvider>
-          <AmpereProvider>
-            {children}
-            <Toaster />
-          </AmpereProvider>
-        </WalletProvider>
+        <Providers>
+          {children}
+          <Toaster />
+        </Providers>
         <Analytics />
       </body>
     </html>

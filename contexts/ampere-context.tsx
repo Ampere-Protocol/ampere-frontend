@@ -2,11 +2,17 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { SuiClient } from '@mysten/sui.js/client';
-import { useWallet } from '@/contexts/wallet-context';
+import { useWallet } from '@suiet/wallet-kit';
 import { OrbitalSdk } from '@/ampere-protocol/src/sdk';
 import { createSdkConfig } from '@/ampere-protocol/src/sdk/config';
 import { AMPERE_CONFIG, getPool3TypeArgs, formatBalance, type TokenSymbol } from '@/lib/ampere-config';
 import type { SwapRoute } from '@/ampere-protocol/src/sdk/types';
+
+// Network RPC URLs
+const NETWORK_CONFIG = {
+  testnet: 'https://fullnode.testnet.sui.io:443',
+  mainnet: 'https://fullnode.mainnet.sui.io:443',
+};
 
 export interface TokenBalance {
   symbol: TokenSymbol;
@@ -43,7 +49,7 @@ interface AmpereProviderProps {
 }
 
 export function AmpereProvider({ children }: AmpereProviderProps) {
-  const { connected, account, provider, rpcUrl, network } = useWallet();
+  const wallet = useWallet();
   const [sdk, setSdk] = useState<OrbitalSdk | null>(null);
   const [client, setClient] = useState<SuiClient | null>(null);
   const [balances, setBalances] = useState<TokenBalance[]>([]);
@@ -55,7 +61,7 @@ export function AmpereProvider({ children }: AmpereProviderProps) {
 
   // Initialize SDK and client when wallet connects
   useEffect(() => {
-    if (!connected || !rpcUrl) {
+    if (!wallet.connected) {
       setSdk(null);
       setClient(null);
       setBalances([]);
@@ -72,6 +78,8 @@ export function AmpereProvider({ children }: AmpereProviderProps) {
     }
 
     try {
+      // Use testnet by default
+      const rpcUrl = NETWORK_CONFIG.testnet;
       const suiClient = new SuiClient({ url: rpcUrl });
       setClient(suiClient);
 
@@ -84,23 +92,23 @@ export function AmpereProvider({ children }: AmpereProviderProps) {
     } catch (error) {
       console.error('Failed to initialize SDK:', error);
     }
-  }, [connected, rpcUrl]);
+  }, [wallet.connected]);
 
   // Fetch balances when account changes
   useEffect(() => {
-    if (connected && account && client) {
+    if (wallet.connected && wallet.account && client) {
       refreshBalances();
     } else {
       setBalances([]);
     }
-  }, [connected, account, client]);
+  }, [wallet.connected, wallet.account, client]);
 
   const refreshBalances = useCallback(async () => {
-    if (!client || !account) return;
+    if (!client || !wallet.account) return;
 
     setLoading(true);
     try {
-      const address = account.address;
+      const address = wallet.account.address;
       const newBalances: TokenBalance[] = [];
 
       // Fetch balances for each token
@@ -157,14 +165,14 @@ export function AmpereProvider({ children }: AmpereProviderProps) {
     } finally {
       setLoading(false);
     }
-  }, [client, account]);
+  }, [client, wallet.account]);
 
   const executeSwap = useCallback(async (params: {
     coinInSymbol: TokenSymbol;
     amount: string;
     route: SwapRoute;
   }): Promise<{ success: boolean; error?: string; digest?: string }> => {
-    if (!sdk || !client || !account || !provider) {
+    if (!sdk || !client || !wallet.account) {
       return { success: false, error: 'Wallet not connected' };
     }
 
@@ -181,7 +189,7 @@ export function AmpereProvider({ children }: AmpereProviderProps) {
 
       // Find coins to use for swap
       const coins = await client.getCoins({
-        owner: account.address,
+        owner: wallet.account.address,
         coinType: coinType,
       });
 
@@ -192,7 +200,7 @@ export function AmpereProvider({ children }: AmpereProviderProps) {
       // Use the first coin (TODO: implement coin selection/merging)
       const coinIn = coins.data[0].coinObjectId;
 
-      // Create swap transaction using SDK
+      // Create swap transaction using SDK - swapExactInTx returns the Transaction with swap already added
       const tx = sdk.pool3.swapExactInTx({
         pool: {
           objectId: AMPERE_CONFIG.poolId,
@@ -204,17 +212,11 @@ export function AmpereProvider({ children }: AmpereProviderProps) {
         typeArgs,
       });
 
-      // Sign and execute with SuiClient (works with Phantom and other wallets via standard API)
-      const result = await client.signAndExecuteTransaction({
-        signer: account,
+      // Sign and execute with Suiet Wallet Kit
+      // Note: Using signAndExecuteTransaction (not signAndExecuteTransactionBlock) per Suiet v0.3.x+ API
+      const result = await wallet.signAndExecuteTransaction({
         transaction: tx,
-        options: {
-          showEffects: true,
-          showObjectChanges: true,
-        },
       });
-
-      console.log('Transaction executed:', result);
 
       console.log('Transaction executed:', result);
 
@@ -232,7 +234,7 @@ export function AmpereProvider({ children }: AmpereProviderProps) {
         error: error.message || 'Swap execution failed',
       };
     }
-  }, [sdk, client, account, provider, refreshBalances]);
+  }, [sdk, client, wallet, refreshBalances]);
 
   const value: AmpereContextType = {
     isConfigured,

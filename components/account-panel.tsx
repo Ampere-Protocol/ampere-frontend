@@ -6,7 +6,7 @@ import { Wallet, History, ClipboardList, RefreshCw } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { useAmpere } from "@/contexts/ampere-context";
-import { useWallet } from "@/contexts/wallet-context";
+import { useWallet } from "@suiet/wallet-kit";
 import { AMPERE_CONFIG } from "@/lib/ampere-config";
 
 interface AccountPanelProps {

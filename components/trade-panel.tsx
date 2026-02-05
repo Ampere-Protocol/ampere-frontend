@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { motion } from "framer-motion";
 import { Loader2, CheckCircle, XCircle } from "lucide-react";
-import { useWallet } from "@/contexts/wallet-context";
+import { useWallet } from "@suiet/wallet-kit";
 import { useAmpere } from "@/contexts/ampere-context";
 import { AMPERE_CONFIG, type TokenSymbol } from "@/lib/ampere-config";
 import type { SwapRoute } from "@/ampere-protocol/src/sdk/types";
