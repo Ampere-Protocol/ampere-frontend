@@ -11,7 +11,7 @@ interface TriangleSelectorProps {
 const assets = {
   A: { name: "USDC", color: "hsl(0, 0%, 100%)", liquidity: 45, volume: 35 },
   B: { name: "USDT", color: "hsl(0, 0%, 100%)", liquidity: 30, volume: 40 },
-  C: { name: "SUI", color: "hsl(0, 0%, 100%)", liquidity: 25, volume: 25 },
+  C: { name: "SUI",  color: "hsl(0, 0%, 100%)", liquidity: 25, volume: 25 },
 };
 
 export function TriangleSelector({ mode, onSelectPair }: TriangleSelectorProps) {
@@ -20,373 +20,198 @@ export function TriangleSelector({ mode, onSelectPair }: TriangleSelectorProps) 
   const [hoveredAsset, setHoveredAsset] = useState<string | null>(null);
 
   const triangleSize = 320;
-  const centerX = triangleSize / 2;
-  const centerY = triangleSize / 2;
+  const center = triangleSize / 2;
   const radius = triangleSize * 0.38;
 
-  // Triangle vertices
   const vertices = {
-    A: { x: centerX, y: centerY - radius },
-    B: { x: centerX - radius * Math.cos(Math.PI / 6), y: centerY + radius * Math.sin(Math.PI / 6) + radius * 0.3 },
-    C: { x: centerX + radius * Math.cos(Math.PI / 6), y: centerY + radius * Math.sin(Math.PI / 6) + radius * 0.3 },
+    A: { x: center, y: center - radius },
+    B: {
+      x: center - radius * Math.cos(Math.PI / 6),
+      y: center + radius * Math.sin(Math.PI / 6) + radius * 0.3,
+    },
+    C: {
+      x: center + radius * Math.cos(Math.PI / 6),
+      y: center + radius * Math.sin(Math.PI / 6) + radius * 0.3,
+    },
   };
 
-  // Calculate dot position based on mode
   const dotPosition = useMemo(() => {
-    const data = mode === "liquidity" 
-      ? { a: assets.A.liquidity, b: assets.B.liquidity, c: assets.C.liquidity }
-      : { a: assets.A.volume, b: assets.B.volume, c: assets.C.volume };
-    
-    const total = data.a + data.b + data.c;
-    const wA = data.a / total;
-    const wB = data.b / total;
-    const wC = data.c / total;
+    const d =
+      mode === "liquidity"
+        ? { a: assets.A.liquidity, b: assets.B.liquidity, c: assets.C.liquidity }
+        : { a: assets.A.volume, b: assets.B.volume, c: assets.C.volume };
+
+    const total = d.a + d.b + d.c;
 
     return {
-      x: vertices.A.x * wA + vertices.B.x * wB + vertices.C.x * wC,
-      y: vertices.A.y * wA + vertices.B.y * wB + vertices.C.y * wC,
+      x:
+        vertices.A.x * (d.a / total) +
+        vertices.B.x * (d.b / total) +
+        vertices.C.x * (d.c / total),
+      y:
+        vertices.A.y * (d.a / total) +
+        vertices.B.y * (d.b / total) +
+        vertices.C.y * (d.c / total),
     };
   }, [mode]);
 
   const edges = [
     { id: "USDC/USDT", from: "A", to: "B", pair: "USDC/USDT" },
-    { id: "USDT/SUI", from: "B", to: "C", pair: "USDT/SUI" },
-    { id: "USDC/SUI", from: "A", to: "C", pair: "USDC/SUI" },
+    { id: "USDT/SUI",  from: "B", to: "C", pair: "USDT/SUI" },
+    { id: "USDC/SUI",  from: "A", to: "C", pair: "USDC/SUI" },
   ];
 
-  const getEdgeMidpoint = (from: string, to: string) => {
-    const v1 = vertices[from as keyof typeof vertices];
-    const v2 = vertices[to as keyof typeof vertices];
+  const midpoint = (a: string, b: string) => {
+    const v1 = vertices[a as keyof typeof vertices];
+    const v2 = vertices[b as keyof typeof vertices];
     return { x: (v1.x + v2.x) / 2, y: (v1.y + v2.y) / 2 };
-  };
-
-  const handleEdgeClick = (pair: string) => {
-    setSelectedEdge(pair);
-    onSelectPair(pair);
   };
 
   return (
     <div className="relative flex flex-col items-center">
-      <svg
-        width={triangleSize}
-        height={triangleSize}
-        viewBox={`0 0 ${triangleSize} ${triangleSize}`}
-        className="overflow-visible"
-      >
-        {/* Defs for gradients and filters */}
+      <svg width={triangleSize} height={triangleSize}>
         <defs>
-          <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur stdDeviation="6" result="coloredBlur" />
-            <feMerge>
-              <feMergeNode in="coloredBlur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-          <filter id="innerGlow" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur stdDeviation="15" result="blur" />
+          <filter id="glow">
+            <feGaussianBlur stdDeviation="6" result="blur" />
             <feMerge>
               <feMergeNode in="blur" />
               <feMergeNode in="SourceGraphic" />
             </feMerge>
           </filter>
-          <filter id="softBlur" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur stdDeviation="25" />
-          </filter>
-          {/* Token A gradient - Cyan at top */}
-          <radialGradient id="tokenAGlow" cx={vertices.A.x} cy={vertices.A.y} r={radius * 1.8} gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="hsl(180, 85%, 55%)" stopOpacity="0.7" />
-            <stop offset="40%" stopColor="hsl(180, 80%, 50%)" stopOpacity="0.3" />
-            <stop offset="100%" stopColor="transparent" stopOpacity="0" />
-          </radialGradient>
-          {/* Token B gradient - Green at bottom left */}
-          <radialGradient id="tokenBGlow" cx={vertices.B.x} cy={vertices.B.y} r={radius * 1.8} gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="hsl(145, 80%, 50%)" stopOpacity="0.7" />
-            <stop offset="40%" stopColor="hsl(145, 75%, 45%)" stopOpacity="0.3" />
-            <stop offset="100%" stopColor="transparent" stopOpacity="0" />
-          </radialGradient>
-          {/* Token C gradient - Orange/Amber at bottom right */}
-          <radialGradient id="tokenCGlow" cx={vertices.C.x} cy={vertices.C.y} r={radius * 1.8} gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="hsl(35, 90%, 55%)" stopOpacity="0.7" />
-            <stop offset="40%" stopColor="hsl(35, 85%, 50%)" stopOpacity="0.3" />
-            <stop offset="100%" stopColor="transparent" stopOpacity="0" />
-          </radialGradient>
-          {/* Clip path for triangle */}
-          <clipPath id="triangleClip">
-            <polygon points={`${vertices.A.x},${vertices.A.y} ${vertices.B.x},${vertices.B.y} ${vertices.C.x},${vertices.C.y}`} />
-          </clipPath>
         </defs>
 
-        {/* Base triangle with dark fill */}
+        {/* Flat Triangle */}
         <polygon
           points={`${vertices.A.x},${vertices.A.y} ${vertices.B.x},${vertices.B.y} ${vertices.C.x},${vertices.C.y}`}
-          fill="hsl(220, 20%, 8%)"
+          fill="hsl(215, 28%, 12%)"
         />
 
-        {/* Token-based gradient layers - clipped to triangle */}
-        <g clipPath="url(#triangleClip)">
-          {/* Token A glow from top */}
-          <circle
-            cx={vertices.A.x}
-            cy={vertices.A.y}
-            r={radius * 1.5}
-            fill="url(#tokenAGlow)"
-            filter="url(#softBlur)"
-          />
-          {/* Token B glow from bottom-left */}
-          <circle
-            cx={vertices.B.x}
-            cy={vertices.B.y}
-            r={radius * 1.5}
-            fill="url(#tokenBGlow)"
-            filter="url(#softBlur)"
-          />
-          {/* Token C glow from bottom-right */}
-          <circle
-            cx={vertices.C.x}
-            cy={vertices.C.y}
-            r={radius * 1.5}
-            fill="url(#tokenCGlow)"
-            filter="url(#softBlur)"
-          />
-        </g>
-
-        {/* Edges - Visual elements first (below hit areas) */}
-        {edges.map((edge) => {
-          const v1 = vertices[edge.from as keyof typeof vertices];
-          const v2 = vertices[edge.to as keyof typeof vertices];
-          const isHovered = hoveredEdge === edge.id;
-          const isSelected = selectedEdge === edge.id;
+        {/* Edges */}
+        {edges.map((e) => {
+          const v1 = vertices[e.from as keyof typeof vertices];
+          const v2 = vertices[e.to as keyof typeof vertices];
+          const active = hoveredEdge === e.id || selectedEdge === e.id;
 
           return (
-            <g key={`visual-${edge.id}`} style={{ pointerEvents: "none" }}>
-              {/* Glow effect for selected/hovered */}
-              {(isHovered || isSelected) && (
+            <g key={e.id} style={{ pointerEvents: "none" }}>
+              {active && (
                 <motion.line
                   x1={v1.x}
                   y1={v1.y}
                   x2={v2.x}
                   y2={v2.y}
-                  stroke="hsl(0, 0%, 100%)"
-                  strokeWidth={16}
-                  strokeLinecap="round"
-                  strokeOpacity={0.3}
+                  stroke="white"
+                  strokeWidth={14}
+                  strokeOpacity={0.25}
                   filter="url(#glow)"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
                 />
               )}
-              {/* Visible edge - bold white stroke */}
+
               <motion.line
                 x1={v1.x}
                 y1={v1.y}
                 x2={v2.x}
                 y2={v2.y}
-                stroke="hsl(0, 0%, 100%)"
-                strokeWidth={isHovered || isSelected ? 6 : 4}
+                stroke="white"
+                strokeWidth={active ? 6 : 4}
                 strokeLinecap="round"
-                initial={false}
-                animate={{ 
-                  strokeWidth: isHovered || isSelected ? 6 : 4,
-                  opacity: isHovered || isSelected ? 1 : 0.85 
-                }}
-                transition={{ duration: 0.2 }}
               />
-              {/* Edge label */}
-              <AnimatePresence>
-                {isHovered && (
-                  <motion.g
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.8 }}
-                  >
-                    <rect
-                      x={getEdgeMidpoint(edge.from, edge.to).x - 30}
-                      y={getEdgeMidpoint(edge.from, edge.to).y - 14}
-                      width="60"
-                      height="28"
-                      rx="8"
-                      fill="hsl(180, 70%, 50%)"
-                      className="drop-shadow-lg"
-                    />
-                    <text
-                      x={getEdgeMidpoint(edge.from, edge.to).x}
-                      y={getEdgeMidpoint(edge.from, edge.to).y + 5}
-                      textAnchor="middle"
-                      className="fill-background text-sm font-bold"
-                    >
-                      {edge.pair}
-                    </text>
-                  </motion.g>
-                )}
-              </AnimatePresence>
-              {/* Selected indicator */}
-              {isSelected && !isHovered && (
-                <motion.circle
-                  cx={getEdgeMidpoint(edge.from, edge.to).x}
-                  cy={getEdgeMidpoint(edge.from, edge.to).y}
-                  r={6}
-                  fill="hsl(180, 70%, 50%)"
-                  filter="url(#glow)"
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                />
+
+              {hoveredEdge === e.id && (
+                <motion.text
+                  x={midpoint(e.from, e.to).x}
+                  y={midpoint(e.from, e.to).y}
+                  textAnchor="middle"
+                  className="fill-white text-xs font-bold"
+                >
+                  {e.pair}
+                </motion.text>
               )}
             </g>
           );
         })}
 
-        {/* Asset nodes */}
-        {Object.entries(vertices).map(([key, pos]) => {
-          const asset = assets[key as keyof typeof assets];
-          const isHovered = hoveredAsset === key;
-          const data = mode === "liquidity" ? asset.liquidity : asset.volume;
+        {/* Asset Nodes */}
+        {Object.entries(vertices).map(([k, p]) => {
+          const asset = assets[k as keyof typeof assets];
+          const hovered = hoveredAsset === k;
 
           return (
             <g
-              key={key}
-              onMouseEnter={() => setHoveredAsset(key)}
+              key={k}
+              onMouseEnter={() => setHoveredAsset(k)}
               onMouseLeave={() => setHoveredAsset(null)}
               className="cursor-pointer"
             >
-              {/* Outer glow ring */}
               <motion.circle
-                cx={pos.x}
-                cy={pos.y}
-                r={isHovered ? 34 : 30}
-                fill="transparent"
-                stroke={asset.color}
-                strokeWidth="3"
-                strokeOpacity={isHovered ? 0.6 : 0.3}
-                filter={isHovered ? "url(#glow)" : undefined}
-                animate={{ r: isHovered ? 34 : 30 }}
+                cx={p.x}
+                cy={p.y}
+                r={hovered ? 32 : 28}
+                fill="none"
+                stroke="white"
+                strokeOpacity={0.4}
               />
-              {/* Main circle background */}
-              <motion.circle
-                cx={pos.x}
-                cy={pos.y}
-                r={24}
-                fill="hsl(var(--card))"
-                stroke={asset.color}
-                strokeWidth="3"
-              />
-              {/* Inner colored fill */}
-              <circle
-                cx={pos.x}
-                cy={pos.y}
-                r={20}
-                fill={asset.color}
-                fillOpacity={0.15}
-              />
-              {/* Asset label */}
+              <circle cx={p.x} cy={p.y} r={22} fill="hsl(215,30%,15%)" />
               <text
-                x={pos.x}
-                y={pos.y + 6}
+                x={p.x}
+                y={p.y + 5}
                 textAnchor="middle"
-                className="fill-foreground text-base font-bold"
-                style={{ fill: asset.color }}
+                className="fill-white font-bold"
               >
-                {key}
+                {k}
               </text>
-              {/* Percentage tooltip */}
-              <AnimatePresence>
-                {isHovered && (
-                  <motion.g
-                    initial={{ opacity: 0, y: 5 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 5 }}
-                  >
-                    <rect
-                      x={pos.x - 40}
-                      y={pos.y + 36}
-                      width="80"
-                      height="32"
-                      rx="8"
-                      fill="hsl(var(--card))"
-                      stroke={asset.color}
-                      strokeWidth="2"
-                    />
-                    <text
-                      x={pos.x}
-                      y={pos.y + 50}
-                      textAnchor="middle"
-                      className="fill-muted-foreground text-[10px] font-medium"
-                    >
-                      {mode === "liquidity" ? "Liquidity" : "Volume"}
-                    </text>
-                    <text
-                      x={pos.x}
-                      y={pos.y + 62}
-                      textAnchor="middle"
-                      className="fill-foreground text-sm font-bold"
-                    >
-                      {data}%
-                    </text>
-                  </motion.g>
-                )}
-              </AnimatePresence>
             </g>
           );
         })}
 
-        {/* Distribution dot */}
+        {/* Distribution Dot */}
         <motion.circle
           cx={dotPosition.x}
           cy={dotPosition.y}
-          r={10}
-          fill="hsl(180, 70%, 50%)"
+          r={9}
+          fill="hsl(150,80%,45%)"
           filter="url(#glow)"
-          animate={{ cx: dotPosition.x, cy: dotPosition.y }}
-          transition={{ type: "spring", stiffness: 200, damping: 20 }}
-          style={{ pointerEvents: "none" }}
+          animate={{
+            cx: dotPosition.x,
+            cy: dotPosition.y,
+            r: [9, 11, 9],
+          }}
+          transition={{ duration: 1.8, repeat: Infinity }}
         />
+
         <motion.circle
           cx={dotPosition.x}
           cy={dotPosition.y}
           r={5}
-          fill="hsl(var(--background))"
+          fill="hsl(215,30%,15%)"
           animate={{ cx: dotPosition.x, cy: dotPosition.y }}
-          transition={{ type: "spring", stiffness: 200, damping: 20 }}
-          style={{ pointerEvents: "none" }}
         />
 
-        {/* Edge hit areas - rendered last for proper event handling */}
-        {edges.map((edge) => {
-          const v1 = vertices[edge.from as keyof typeof vertices];
-          const v2 = vertices[edge.to as keyof typeof vertices];
+        {/* Edge Hit Areas */}
+        {edges.map((e) => {
+          const v1 = vertices[e.from as keyof typeof vertices];
+          const v2 = vertices[e.to as keyof typeof vertices];
 
           return (
             <line
-              key={`hit-${edge.id}`}
+              key={`hit-${e.id}`}
               x1={v1.x}
               y1={v1.y}
               x2={v2.x}
               y2={v2.y}
               stroke="transparent"
-              strokeWidth="40"
+              strokeWidth={40}
               className="cursor-pointer"
-              onMouseEnter={() => setHoveredEdge(edge.id)}
+              onMouseEnter={() => setHoveredEdge(e.id)}
               onMouseLeave={() => setHoveredEdge(null)}
-              onClick={() => handleEdgeClick(edge.pair)}
+              onClick={() => {
+                setSelectedEdge(e.id);
+                onSelectPair(e.pair);
+              }}
             />
           );
         })}
       </svg>
-
-      {/* Legend */}
-      <div className="mt-6 flex items-center gap-6 text-xs text-muted-foreground">
-        <div className="flex items-center gap-2">
-          <div className="h-3 w-3 rounded-full" style={{ backgroundColor: assets.A.color }} />
-          <span>USDC</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="h-3 w-3 rounded-full" style={{ backgroundColor: assets.B.color }} />
-          <span>USDT</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="h-3 w-3 rounded-full" style={{ backgroundColor: assets.C.color }} />
-          <span>SUI</span>
-        </div>
-      </div>
     </div>
   );
 }
