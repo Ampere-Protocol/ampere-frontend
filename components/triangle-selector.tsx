@@ -158,7 +158,7 @@ export function TriangleSelector({ mode, onSelectPair }: TriangleSelectorProps) 
                 textAnchor="middle"
                 className="fill-white font-bold"
               >
-                {k}
+                {asset.name}
               </text>
             </g>
           );
@@ -174,9 +174,8 @@ export function TriangleSelector({ mode, onSelectPair }: TriangleSelectorProps) 
           animate={{
             cx: dotPosition.x,
             cy: dotPosition.y,
-            r: [9, 11, 9],
           }}
-          transition={{ duration: 1.8, repeat: Infinity }}
+          transition={{ type: "spring", stiffness: 200, damping: 20 }}
         />
 
         <motion.circle
