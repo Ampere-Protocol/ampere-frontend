@@ -36,18 +36,12 @@ export function Navigation({ onNavigate, currentPage = "home" }: NavigationProps
             Trade
           </Button>
           <Button
-            variant="ghost"
+            variant={currentPage === "liquidity" ? "secondary" : "ghost"}
             size="sm"
+            onClick={() => onNavigate?.("liquidity")}
             className="text-muted-foreground hover:text-foreground"
           >
-            Docs
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground hover:text-foreground"
-          >
-            Pools
+            Add/Remove Liquidity
           </Button>
         </nav>
 

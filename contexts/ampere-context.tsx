@@ -41,6 +41,14 @@ interface AmpereContextType {
     amount: string;
     route: SwapRoute;
   }) => Promise<{ success: boolean; error?: string; digest?: string }>;
+  addLiquidity: (params: {
+    amountA: string;
+    amountB: string;
+    amountC: string;
+  }) => Promise<{ success: boolean; error?: string; digest?: string }>;
+  removeLiquidity: (params: {
+    lpAmount: string;
+  }) => Promise<{ success: boolean; error?: string; digest?: string }>;
 }
 
 const AmpereContext = createContext<AmpereContextType | null>(null);
@@ -243,7 +251,7 @@ export function AmpereProvider({ children }: AmpereProviderProps) {
       // Perform swap - returns the output coin
       const [outputCoin] = tx.moveCall({
         target: `${AMPERE_CONFIG.packageId}::orbital_pool3::${routeFunctions[route]}`,
-        typeArguments: typeArgs as string[],
+        typeArguments: [...typeArgs],
         arguments: [
           tx.object(AMPERE_CONFIG.poolId),
           coinInArg,
@@ -258,7 +266,7 @@ export function AmpereProvider({ children }: AmpereProviderProps) {
 
       // Sign and execute with Suiet Wallet Kit using TransactionBlock
       const result = await wallet.signAndExecuteTransactionBlock({
-        transactionBlock: tx,
+        transactionBlock: tx as any,
         options: {
           showEffects: true,
           showObjectChanges: true,
@@ -288,6 +296,173 @@ export function AmpereProvider({ children }: AmpereProviderProps) {
     }
   }, [sdk, client, wallet, refreshBalances]);
 
+  const addLiquidity = useCallback(async (params: {
+    amountA: string;
+    amountB: string;
+    amountC: string;
+  }): Promise<{ success: boolean; error?: string; digest?: string }> => {
+    if (!sdk || !client || !wallet.account) {
+      return { success: false, error: 'Wallet not connected' };
+    }
+
+    console.log('💧 Adding liquidity:', params);
+
+    try {
+      const { amountA, amountB, amountC } = params;
+      const typeArgs = getPool3TypeArgs();
+      
+      // Create transaction
+      const tx = new TransactionBlock();
+      
+      // Get or create coins for each token
+      const getCoinsForToken = async (
+        symbol: TokenSymbol, 
+        amount: string, 
+        typeIndex: number
+      ) => {
+        const coinType = typeArgs[typeIndex];
+        const metadata = AMPERE_CONFIG.tokens[symbol];
+        const amountInBaseUnits = Math.floor(parseFloat(amount) * Math.pow(10, metadata.decimals));
+        
+        // Handle SUI differently
+        if (symbol === 'SUI') {
+          const [coinArg] = tx.splitCoins(tx.gas, [amountInBaseUnits]);
+          return coinArg;
+        }
+        
+        // For other tokens, get coins
+        const coins = await client.getCoins({
+          owner: wallet.account!.address,
+          coinType: coinType,
+        });
+        
+        if (coins.data.length === 0) {
+          throw new Error(`No ${symbol} coins available`);
+        }
+        
+        // Use first coin
+        return tx.object(coins.data[0].coinObjectId);
+      };
+      
+      // Get coin arguments
+      const coinAArg = await getCoinsForToken('USDC', amountA, 0);
+      const coinBArg = await getCoinsForToken('USDT', amountB, 1);
+      const coinCArg = await getCoinsForToken('SUI', amountC, 2);
+      
+      // Add liquidity - returns LP coin
+      const [lpCoin] = tx.moveCall({
+        target: `${AMPERE_CONFIG.packageId}::orbital_pool3::add_liquidity`,
+        typeArguments: [...typeArgs],
+        arguments: [
+          tx.object(AMPERE_CONFIG.poolId),
+          coinAArg,
+          coinBArg,
+          coinCArg,
+        ],
+      });
+      
+      // Transfer LP coin to sender
+      tx.transferObjects([lpCoin], wallet.account.address);
+      
+      console.log('✍️ Signing and executing add liquidity...');
+      
+      const result = await wallet.signAndExecuteTransactionBlock({
+        transactionBlock: tx as any,
+        options: {
+          showEffects: true,
+          showObjectChanges: true,
+        },
+      });
+      
+      console.log('✅ Liquidity added:', result);
+      
+      // Refresh balances
+      await refreshBalances();
+      
+      return {
+        success: true,
+        digest: result.digest,
+      };
+    } catch (error: any) {
+      console.error('❌ Add liquidity failed:', error);
+      return {
+        success: false,
+        error: error.message || 'Add liquidity failed',
+      };
+    }
+  }, [sdk, client, wallet, refreshBalances]);
+
+  const removeLiquidity = useCallback(async (params: {
+    lpAmount: string;
+  }): Promise<{ success: boolean; error?: string; digest?: string }> => {
+    if (!sdk || !client || !wallet.account) {
+      return { success: false, error: 'Wallet not connected' };
+    }
+
+    console.log('💧 Removing liquidity:', params);
+
+    try {
+      const { lpAmount } = params;
+      const typeArgs = getPool3TypeArgs();
+      
+      // Get LP tokens
+      const lpCoinType = typeArgs[3];
+      const lpCoins = await client.getCoins({
+        owner: wallet.account.address,
+        coinType: lpCoinType,
+      });
+      
+      if (lpCoins.data.length === 0) {
+        return { success: false, error: 'No LP tokens available' };
+      }
+      
+      // Create transaction
+      const tx = new TransactionBlock();
+      
+      // Use the first LP coin
+      const lpCoinArg = tx.object(lpCoins.data[0].coinObjectId);
+      
+      // Remove liquidity - returns [coinA, coinB, coinC]
+      const [coinA, coinB, coinC] = tx.moveCall({
+        target: `${AMPERE_CONFIG.packageId}::orbital_pool3::remove_liquidity`,
+        typeArguments: [...typeArgs],
+        arguments: [
+          tx.object(AMPERE_CONFIG.poolId),
+          lpCoinArg,
+        ],
+      });
+      
+      // Transfer returned coins to sender
+      tx.transferObjects([coinA, coinB, coinC], wallet.account.address);
+      
+      console.log('✍️ Signing and executing remove liquidity...');
+      
+      const result = await wallet.signAndExecuteTransactionBlock({
+        transactionBlock: tx as any,
+        options: {
+          showEffects: true,
+          showObjectChanges: true,
+        },
+      });
+      
+      console.log('✅ Liquidity removed:', result);
+      
+      // Refresh balances
+      await refreshBalances();
+      
+      return {
+        success: true,
+        digest: result.digest,
+      };
+    } catch (error: any) {
+      console.error('❌ Remove liquidity failed:', error);
+      return {
+        success: false,
+        error: error.message || 'Remove liquidity failed',
+      };
+    }
+  }, [sdk, client, wallet, refreshBalances]);
+
   const value: AmpereContextType = {
     isConfigured,
     sdk,
@@ -296,6 +471,8 @@ export function AmpereProvider({ children }: AmpereProviderProps) {
     loading,
     refreshBalances,
     executeSwap,
+    addLiquidity,
+    removeLiquidity,
   };
 
   return (
