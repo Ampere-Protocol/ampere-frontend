@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Plus, Minus, Droplets, Loader2 } from "lucide-react";
+import { ArrowLeft, Plus, Minus, Droplets, Loader2, Settings2, Trash2, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAmpere } from "@/contexts/ampere-context";
 import { useWallet } from '@suiet/wallet-kit';
 import { formatBalance, type TokenSymbol } from "@/lib/ampere-config";
+import type { OrbitalTickConfigInput } from '@/ampere-protocol/src/sdk/types';
 
 interface LiquidityPanelProps {
   onBack: () => void;
@@ -19,12 +20,19 @@ interface LiquidityPanelProps {
 
 export function LiquidityPanel({ onBack }: LiquidityPanelProps) {
   const wallet = useWallet();
-  const { balances, loading, addLiquidity, removeLiquidity, isConfigured, refreshBalances } = useAmpere();
+  const { balances, loading, addLiquidity, removeLiquidity, isConfigured, refreshBalances, poolTicks } = useAmpere();
   
   // Add Liquidity state
   const [amountA, setAmountA] = useState("");
   const [amountB, setAmountB] = useState("");
   const [amountC, setAmountC] = useState("");
+  
+  // Tick configuration state
+  const [useCustomTicks, setUseCustomTicks] = useState(false);
+  const [customTicks, setCustomTicks] = useState<OrbitalTickConfigInput[]>([
+    { bandBps: 50, weightBps: 6000 },
+    { bandBps: 100, weightBps: 4000 },
+  ]);
   
   // Remove Liquidity state
   const [lpAmount, setLpAmount] = useState("");
@@ -78,6 +86,20 @@ export function LiquidityPanel({ onBack }: LiquidityPanelProps) {
       return;
     }
 
+    // Validate custom ticks if enabled
+    if (useCustomTicks) {
+      const totalWeight = customTicks.reduce((sum, t) => sum + t.weightBps, 0);
+      if (totalWeight !== 10000) {
+        setError(`Tick weights must sum to 10000 bps (100%). Current total: ${totalWeight} bps`);
+        return;
+      }
+      
+      if (customTicks.some(t => t.bandBps <= 0 || t.weightBps <= 0)) {
+        setError("All tick bands and weights must be greater than 0");
+        return;
+      }
+    }
+
     setError(null);
     setSuccess(null);
     setProcessing(true);
@@ -87,6 +109,7 @@ export function LiquidityPanel({ onBack }: LiquidityPanelProps) {
         amountA,
         amountB,
         amountC,
+        ticks: useCustomTicks ? customTicks : undefined,
       });
 
       if (result.success) {
@@ -300,6 +323,141 @@ export function LiquidityPanel({ onBack }: LiquidityPanelProps) {
                       </div>
                     </div>
 
+                    {/* Tick Configuration Section */}
+                    <div className="border-t border-border pt-4 mt-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <Settings2 className="h-4 w-4 text-muted-foreground" />
+                          <Label className="cursor-pointer" onClick={() => setUseCustomTicks(!useCustomTicks)}>
+                            Advanced: Custom Tick Configuration
+                          </Label>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={useCustomTicks}
+                          onChange={(e) => setUseCustomTicks(e.target.checked)}
+                          className="h-4 w-4 rounded border-gray-300"
+                        />
+                      </div>
+
+                      {useCustomTicks && (
+                        <div className="space-y-3 bg-muted/50 p-3 rounded-lg">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="text-xs text-muted-foreground flex items-start gap-2 flex-1">
+                              <Info className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                              <span>
+                                Configure how liquidity is distributed across price bands. Each tick represents a price range.
+                              </span>
+                            </div>
+                            {poolTicks.length > 0 && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setCustomTicks(poolTicks.map(t => ({
+                                    bandBps: t.bandBps,
+                                    weightBps: t.weightBps,
+                                  })));
+                                }}
+                                className="h-7 text-xs whitespace-nowrap"
+                              >
+                                Copy Current
+                              </Button>
+                            )}
+                          </div>
+                          
+                          {customTicks.map((tick, index) => (
+                            <div key={index} className="flex gap-2 items-start">
+                              <div className="flex-1 space-y-2 bg-background p-3 rounded border">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-medium">Tick {index + 1}</span>
+                                  {customTicks.length > 1 && (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-6 w-6"
+                                      onClick={() => {
+                                        const newTicks = customTicks.filter((_, i) => i !== index);
+                                        // Rebalance weights
+                                        const totalWeight = newTicks.reduce((sum, t) => sum + t.weightBps, 0);
+                                        if (totalWeight > 0) {
+                                          newTicks.forEach(t => {
+                                            t.weightBps = Math.round((t.weightBps / totalWeight) * 10000);
+                                          });
+                                        }
+                                        setCustomTicks(newTicks);
+                                      }}
+                                    >
+                                      <Trash2 className="h-3 w-3" />
+                                    </Button>
+                                  )}
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div>
+                                    <Label className="text-xs">Band (bps)</Label>
+                                    <Input
+                                      type="number"
+                                      value={tick.bandBps}
+                                      onChange={(e) => {
+                                        const newTicks = [...customTicks];
+                                        newTicks[index].bandBps = parseInt(e.target.value) || 0;
+                                        setCustomTicks(newTicks);
+                                      }}
+                                      className="h-8 text-xs"
+                                      min="1"
+                                    />
+                                    <span className="text-[10px] text-muted-foreground">
+                                      {(tick.bandBps / 100).toFixed(2)}%
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <Label className="text-xs">Weight (bps)</Label>
+                                    <Input
+                                      type="number"
+                                      value={tick.weightBps}
+                                      onChange={(e) => {
+                                        const newTicks = [...customTicks];
+                                        newTicks[index].weightBps = parseInt(e.target.value) || 0;
+                                        setCustomTicks(newTicks);
+                                      }}
+                                      className="h-8 text-xs"
+                                      min="1"
+                                      max="10000"
+                                    />
+                                    <span className="text-[10px] text-muted-foreground">
+                                      {(tick.weightBps / 100).toFixed(2)}%
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                          
+                          <div className="flex justify-between items-center pt-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setCustomTicks([...customTicks, { bandBps: 50, weightBps: 1000 }]);
+                              }}
+                              className="h-7 text-xs"
+                            >
+                              <Plus className="h-3 w-3 mr-1" />
+                              Add Tick
+                            </Button>
+                            <span className="text-xs text-muted-foreground">
+                              Total weight: {customTicks.reduce((sum, t) => sum + t.weightBps, 0)} bps
+                              {customTicks.reduce((sum, t) => sum + t.weightBps, 0) !== 10000 && (
+                                <span className="text-destructive ml-1">
+                                  (should be 10000)
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
                     <Button
                       className="w-full"
                       onClick={handleAddLiquidity}
@@ -467,6 +625,62 @@ export function LiquidityPanel({ onBack }: LiquidityPanelProps) {
                     💡 Tip: Adding liquidity in balanced proportions optimizes your position and minimizes price impact.
                   </AlertDescription>
                 </Alert>
+              </CardContent>
+            </Card>
+
+            {/* Current Pool Ticks */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Settings2 className="h-4 w-4" />
+                  Current Pool Ticks
+                </CardTitle>
+                <CardDescription>Active price bands and liquidity distribution</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {poolTicks.length > 0 ? (
+                  <div className="space-y-3">
+                    {poolTicks.map((tick, index) => (
+                      <div key={index} className="p-3 rounded-lg bg-muted/50 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium">Tick {index + 1}</span>
+                          <div className="flex gap-2 text-xs">
+                            <span className="px-2 py-0.5 rounded bg-primary/10 text-primary">
+                              {(tick.bandBps / 100).toFixed(2)}% band
+                            </span>
+                            <span className="px-2 py-0.5 rounded bg-success/10 text-success">
+                              {(tick.weightBps / 100).toFixed(2)}% weight
+                            </span>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 text-xs">
+                          <div>
+                            <div className="text-muted-foreground">USDC</div>
+                            <div className="font-mono">{formatBalance(tick.balanceA, 'USDC').toFixed(2)}</div>
+                          </div>
+                          <div>
+                            <div className="text-muted-foreground">USDT</div>
+                            <div className="font-mono">{formatBalance(tick.balanceB, 'USDT').toFixed(2)}</div>
+                          </div>
+                          <div>
+                            <div className="text-muted-foreground">SUI</div>
+                            <div className="font-mono">{formatBalance(tick.balanceC, 'SUI').toFixed(2)}</div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    <Alert>
+                      <AlertDescription className="text-xs">
+                        <Info className="h-3 w-3 inline mr-1" />
+                        Ticks define price ranges. Liquidity is distributed according to weights.
+                      </AlertDescription>
+                    </Alert>
+                  </div>
+                ) : (
+                  <div className="text-sm text-muted-foreground text-center py-4">
+                    No tick data available
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

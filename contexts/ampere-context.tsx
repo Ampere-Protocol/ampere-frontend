@@ -7,7 +7,7 @@ import { useWallet } from '@suiet/wallet-kit';
 import { OrbitalSdk } from '@/ampere-protocol/src/sdk';
 import { createSdkConfig } from '@/ampere-protocol/src/sdk/config';
 import { AMPERE_CONFIG, getPool3TypeArgs, formatBalance, type TokenSymbol } from '@/lib/ampere-config';
-import type { SwapRoute } from '@/ampere-protocol/src/sdk/types';
+import type { SwapRoute, OrbitalTickConfigInput } from '@/ampere-protocol/src/sdk/types';
 
 // Network RPC URLs
 const NETWORK_CONFIG = {
@@ -35,6 +35,15 @@ export interface PairPrice {
   liquidityB: number;
 }
 
+export interface PoolTick {
+  bandBps: number;
+  weightBps: number;
+  balanceA: bigint;
+  balanceB: bigint;
+  balanceC: bigint;
+  lSquared: string;
+}
+
 interface AmpereContextType {
   // SDK instance
   sdk: OrbitalSdk | null;
@@ -43,6 +52,7 @@ interface AmpereContextType {
   // Balances
   balances: TokenBalance[];
   poolReserves: PoolReserves | null;
+  poolTicks: PoolTick[];
   loading: boolean;
   
   // Configuration status
@@ -61,6 +71,7 @@ interface AmpereContextType {
     amountA: string;
     amountB: string;
     amountC: string;
+    ticks?: OrbitalTickConfigInput[];
   }) => Promise<{ success: boolean; error?: string; digest?: string }>;
   removeLiquidity: (params: {
     lpAmount: string;
@@ -79,6 +90,7 @@ export function AmpereProvider({ children }: AmpereProviderProps) {
   const [client, setClient] = useState<SuiClient | null>(null);
   const [balances, setBalances] = useState<TokenBalance[]>([]);
   const [poolReserves, setPoolReserves] = useState<PoolReserves | null>(null);
+  const [poolTicks, setPoolTicks] = useState<PoolTick[]>([]);
   const [loading, setLoading] = useState(false);
   
   // Check if configuration is valid
@@ -325,15 +337,19 @@ export function AmpereProvider({ children }: AmpereProviderProps) {
     amountA: string;
     amountB: string;
     amountC: string;
+    ticks?: OrbitalTickConfigInput[];
   }): Promise<{ success: boolean; error?: string; digest?: string }> => {
     if (!sdk || !client || !wallet.account) {
       return { success: false, error: 'Wallet not connected' };
     }
 
     console.log('💧 Adding liquidity:', params);
+    if (params.ticks) {
+      console.log('📊 Custom ticks:', params.ticks);
+    }
 
     try {
-      const { amountA, amountB, amountC } = params;
+      const { amountA, amountB, amountC, ticks } = params;
       const typeArgs = getPool3TypeArgs();
       
       // Create transaction
@@ -503,6 +519,20 @@ export function AmpereProvider({ children }: AmpereProviderProps) {
         
         // Calculate total reserves from ticks
         if (fields.ticks && Array.isArray(fields.ticks)) {
+          // Extract tick information
+          const ticks: PoolTick[] = fields.ticks.map((t: any) => {
+            const tf = t.fields || t;
+            return {
+              bandBps: Number(tf.band_bps || 0),
+              weightBps: Number(tf.weight_bps || 0),
+              balanceA: BigInt(tf.balance_a || 0),
+              balanceB: BigInt(tf.balance_b || 0),
+              balanceC: BigInt(tf.balance_c || 0),
+              lSquared: tf.l_squared || '0',
+            };
+          });
+          setPoolTicks(ticks);
+          
           const totalA = fields.ticks.reduce((sum: bigint, t: any) => {
             const tf = t.fields || t;
             return sum + BigInt(tf.balance_a || 0);
@@ -577,6 +607,7 @@ export function AmpereProvider({ children }: AmpereProviderProps) {
     client,
     balances,
     poolReserves,
+    poolTicks,
     loading,
     refreshBalances,
     getPoolReserves,
