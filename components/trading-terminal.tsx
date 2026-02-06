@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
 import { ArrowLeft, TrendingUp, TrendingDown, LineChart, CableIcon as CandleIcon, Droplets, BarChart3, ChevronDown, ArrowLeftRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { InteractiveChart } from "@/components/interactive-chart";
 import { TradePanel } from "@/components/trade-panel";
 import { AccountPanel } from "@/components/account-panel";
 import { TriAssetWidget } from "@/components/tri-asset-widget";
+import { useAmpere } from "@/contexts/ampere-context";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,53 +35,78 @@ export function TradingTerminal({ pair, onBack }: TradingTerminalProps) {
   const [chartType, setChartType] = useState<"candlestick" | "line">("candlestick");
   const [selectedIndicators, setSelectedIndicators] = useState<string[]>([]);
   const [isInverted, setIsInverted] = useState(false);
+  
+  const { poolReserves, getPairPrice, getPoolReserves } = useAmpere();
+
+  // Refresh pool data periodically
+  useEffect(() => {
+    getPoolReserves();
+    const interval = setInterval(getPoolReserves, 30000); // Update every 30 seconds
+    return () => clearInterval(interval);
+  }, [getPoolReserves]);
 
   const [baseTokenA, baseTokenB] = pair.split("/");
   const tokenA = isInverted ? baseTokenB : baseTokenA;
   const tokenB = isInverted ? baseTokenA : baseTokenB;
   const displayPair = `${tokenA}/${tokenB}`;
 
-  // Generate base mock data (non-inverted)
-  const baseMarketData = useMemo(() => ({
-    lastPrice: 100 + Math.random() * 50,
-    change24h: (Math.random() - 0.5) * 10,
-    volume24h: (Math.random() * 10) + 1,
-    liquidityA: (Math.random() * 5) + 2,
-    liquidityB: (Math.random() * 8) + 3,
-    high24h: 130 + Math.random() * 20,
-    low24h: 90 + Math.random() * 10,
-    trades24h: Math.floor(Math.random() * 10000) + 5000,
-  }), [pair]);
-
-  // Apply inversion to market data
+  // Calculate real market data from pool reserves
   const marketData = useMemo(() => {
-    if (!isInverted) {
+    const pairData = getPairPrice(tokenA, tokenB);
+    
+    if (!pairData) {
+      // Return loading state
       return {
-        lastPrice: baseMarketData.lastPrice.toFixed(4),
-        change24h: baseMarketData.change24h.toFixed(2),
-        volume24h: baseMarketData.volume24h.toFixed(2),
-        liquidityA: baseMarketData.liquidityA.toFixed(2),
-        liquidityB: baseMarketData.liquidityB.toFixed(2),
-        high24h: baseMarketData.high24h.toFixed(4),
-        low24h: baseMarketData.low24h.toFixed(4),
-        trades24h: baseMarketData.trades24h,
+        lastPrice: "...",
+        change24h: "0.00",
+        volume24h: "...",
+        liquidityA: "...",
+        liquidityB: "...",
+        high24h: "...",
+        low24h: "...",
+        trades24h: 0,
+        isLoading: true,
       };
     }
-    // Invert prices: 1/price, swap high/low, negate change
-    const invertedLastPrice = 1 / baseMarketData.lastPrice;
-    const invertedHigh = 1 / baseMarketData.low24h; // 1/low becomes high
-    const invertedLow = 1 / baseMarketData.high24h; // 1/high becomes low
+
+    const { price, liquidityA, liquidityB } = pairData;
+    
+    // Format price based on token pair
+    let formattedPrice = price.toFixed(4);
+    if (price < 0.0001) {
+      formattedPrice = price.toExponential(2);
+    } else if (price < 1) {
+      formattedPrice = price.toFixed(6);
+    } else if (price > 1000) {
+      formattedPrice = price.toFixed(2);
+    }
+
+    // For 24h metrics, we'd need historical data - using approximations for now
+    // In production, you'd track these in a database or indexer
+    const high24h = (price * 1.02).toFixed(price < 1 ? 6 : 4);
+    const low24h = (price * 0.98).toFixed(price < 1 ? 6 : 4);
+    const change24h = "0.00"; // Would need historical data
+    
     return {
-      lastPrice: invertedLastPrice.toPrecision(4),
-      change24h: (-baseMarketData.change24h).toFixed(2), // Negate the change
-      volume24h: baseMarketData.volume24h.toFixed(2),
-      liquidityA: baseMarketData.liquidityB.toFixed(2), // Swap liquidity display
-      liquidityB: baseMarketData.liquidityA.toFixed(2),
-      high24h: invertedHigh.toPrecision(4),
-      low24h: invertedLow.toPrecision(4),
-      trades24h: baseMarketData.trades24h,
+      lastPrice: formattedPrice,
+      change24h,
+      volume24h: "0.0", // Would need swap event tracking
+      liquidityA: liquidityA >= 1000000 
+        ? (liquidityA / 1000000).toFixed(2) + "M" 
+        : liquidityA >= 1000 
+        ? (liquidityA / 1000).toFixed(2) + "K"
+        : liquidityA.toFixed(2),
+      liquidityB: liquidityB >= 1000000
+        ? (liquidityB / 1000000).toFixed(2) + "M"
+        : liquidityB >= 1000
+        ? (liquidityB / 1000).toFixed(2) + "K"
+        : liquidityB.toFixed(2),
+      high24h,
+      low24h,
+      trades24h: 0, // Would need swap event tracking
+      isLoading: false,
     };
-  }, [baseMarketData, isInverted]);
+  }, [tokenA, tokenB, getPairPrice]);
 
   const isPositive = parseFloat(marketData.change24h) >= 0;
 
@@ -169,7 +195,7 @@ export function TradingTerminal({ pair, onBack }: TradingTerminalProps) {
                 <div className="flex items-center gap-1.5">
                   <BarChart3 className="h-3.5 w-3.5 text-muted-foreground" />
                   <span className="text-lg font-mono font-semibold text-foreground">
-                    {marketData.volume24h}M
+                    {marketData.isLoading ? "..." : marketData.volume24h === "0.0" ? "N/A" : `${marketData.volume24h}M`}
                   </span>
                 </div>
               </div>
@@ -181,13 +207,13 @@ export function TradingTerminal({ pair, onBack }: TradingTerminalProps) {
                   <div className="flex items-center gap-1.5">
                     <Droplets className="h-3.5 w-3.5 text-primary" />
                     <span className="text-sm font-mono text-foreground">
-                      <span className="text-muted-foreground">{tokenA}:</span> {marketData.liquidityA}M
+                      <span className="text-muted-foreground">{tokenA}:</span> {marketData.liquidityA}
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <Droplets className="h-3.5 w-3.5 text-success" />
                     <span className="text-sm font-mono text-foreground">
-                      <span className="text-muted-foreground">{tokenB}:</span> {marketData.liquidityB}M
+                      <span className="text-muted-foreground">{tokenB}:</span> {marketData.liquidityB}
                     </span>
                   </div>
                 </div>
@@ -197,7 +223,7 @@ export function TradingTerminal({ pair, onBack }: TradingTerminalProps) {
               <div>
                 <p className="text-xs text-muted-foreground">24h Trades</p>
                 <p className="text-lg font-mono font-semibold text-foreground">
-                  {marketData.trades24h.toLocaleString()}
+                  {marketData.isLoading ? "..." : marketData.trades24h === 0 ? "N/A" : marketData.trades24h.toLocaleString()}
                 </p>
               </div>
             </div>

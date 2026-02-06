@@ -29,6 +29,12 @@ export interface PoolReserves {
   totalLiquidity: number;
 }
 
+export interface PairPrice {
+  price: number;
+  liquidityA: number;
+  liquidityB: number;
+}
+
 interface AmpereContextType {
   // SDK instance
   sdk: OrbitalSdk | null;
@@ -45,6 +51,7 @@ interface AmpereContextType {
   // Actions
   refreshBalances: () => Promise<void>;
   getPoolReserves: () => Promise<void>;
+  getPairPrice: (tokenA: string, tokenB: string) => PairPrice | null;
   executeSwap: (params: {
     coinInSymbol: TokenSymbol;
     amount: string;
@@ -537,6 +544,33 @@ export function AmpereProvider({ children }: AmpereProviderProps) {
     }
   }, [client]);
 
+  const getPairPrice = useCallback((tokenA: string, tokenB: string): PairPrice | null => {
+    if (!poolReserves) return null;
+
+    // Map token names to reserves
+    const getReserve = (token: string): number => {
+      const upperToken = token.toUpperCase();
+      if (upperToken === 'USDC') return formatBalance(poolReserves.usdc, 'USDC');
+      if (upperToken === 'USDT') return formatBalance(poolReserves.usdt, 'USDT');
+      if (upperToken === 'SUI') return formatBalance(poolReserves.sui, 'SUI');
+      return 0;
+    };
+
+    const reserveA = getReserve(tokenA);
+    const reserveB = getReserve(tokenB);
+
+    if (reserveA === 0 || reserveB === 0) return null;
+
+    // Price = reserveB / reserveA (how much tokenB per 1 tokenA)
+    const price = reserveB / reserveA;
+
+    return {
+      price,
+      liquidityA: reserveA,
+      liquidityB: reserveB,
+    };
+  }, [poolReserves]);
+
   const value: AmpereContextType = {
     isConfigured,
     sdk,
@@ -546,6 +580,7 @@ export function AmpereProvider({ children }: AmpereProviderProps) {
     loading,
     refreshBalances,
     getPoolReserves,
+    getPairPrice,
     executeSwap,
     addLiquidity,
     removeLiquidity,
