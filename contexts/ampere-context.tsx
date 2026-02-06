@@ -22,6 +22,13 @@ export interface TokenBalance {
   coinCount: number;
 }
 
+export interface PoolReserves {
+  usdc: bigint;
+  usdt: bigint;
+  sui: bigint;
+  totalLiquidity: number;
+}
+
 interface AmpereContextType {
   // SDK instance
   sdk: OrbitalSdk | null;
@@ -29,6 +36,7 @@ interface AmpereContextType {
   
   // Balances
   balances: TokenBalance[];
+  poolReserves: PoolReserves | null;
   loading: boolean;
   
   // Configuration status
@@ -36,6 +44,7 @@ interface AmpereContextType {
   
   // Actions
   refreshBalances: () => Promise<void>;
+  getPoolReserves: () => Promise<void>;
   executeSwap: (params: {
     coinInSymbol: TokenSymbol;
     amount: string;
@@ -62,6 +71,7 @@ export function AmpereProvider({ children }: AmpereProviderProps) {
   const [sdk, setSdk] = useState<OrbitalSdk | null>(null);
   const [client, setClient] = useState<SuiClient | null>(null);
   const [balances, setBalances] = useState<TokenBalance[]>([]);
+  const [poolReserves, setPoolReserves] = useState<PoolReserves | null>(null);
   const [loading, setLoading] = useState(false);
   
   // Check if configuration is valid
@@ -107,14 +117,22 @@ export function AmpereProvider({ children }: AmpereProviderProps) {
     }
   }, [wallet.connected]);
 
-  // Fetch balances when account changes
+  // Fetch balances and pool reserves when account changes
   useEffect(() => {
     if (wallet.connected && wallet.account && client) {
       refreshBalances();
+      getPoolReserves();
     } else {
       setBalances([]);
     }
   }, [wallet.connected, wallet.account, client]);
+
+  // Fetch pool reserves on mount (even without wallet)
+  useEffect(() => {
+    if (client && isConfigured) {
+      getPoolReserves();
+    }
+  }, [client, isConfigured]);
 
   const refreshBalances = useCallback(async () => {
     if (!client || !wallet.account) return;
@@ -463,13 +481,71 @@ export function AmpereProvider({ children }: AmpereProviderProps) {
     }
   }, [sdk, client, wallet, refreshBalances]);
 
+  const getPoolReserves = useCallback(async () => {
+    if (!client) return;
+
+    try {
+      // Get pool object
+      const poolObject = await client.getObject({
+        id: AMPERE_CONFIG.poolId,
+        options: { showContent: true },
+      });
+
+      if (poolObject.data?.content?.dataType === 'moveObject') {
+        const fields = poolObject.data.content.fields as any;
+        
+        // Calculate total reserves from ticks
+        if (fields.ticks && Array.isArray(fields.ticks)) {
+          const totalA = fields.ticks.reduce((sum: bigint, t: any) => {
+            const tf = t.fields || t;
+            return sum + BigInt(tf.balance_a || 0);
+          }, BigInt(0));
+          
+          const totalB = fields.ticks.reduce((sum: bigint, t: any) => {
+            const tf = t.fields || t;
+            return sum + BigInt(tf.balance_b || 0);
+          }, BigInt(0));
+          
+          const totalC = fields.ticks.reduce((sum: bigint, t: any) => {
+            const tf = t.fields || t;
+            return sum + BigInt(tf.balance_c || 0);
+          }, BigInt(0));
+
+          // Calculate total liquidity in USD (assuming USDC and USDT are $1)
+          const totalLiquidity = 
+            formatBalance(totalA, 'USDC') + 
+            formatBalance(totalB, 'USDT') + 
+            formatBalance(totalC, 'SUI') * 2.5; // Assuming SUI price ~$2.5
+
+          setPoolReserves({
+            usdc: totalA,
+            usdt: totalB,
+            sui: totalC,
+            totalLiquidity,
+          });
+
+          console.log('🏊 Pool Reserves:', {
+            USDC: formatBalance(totalA, 'USDC'),
+            USDT: formatBalance(totalB, 'USDT'),
+            SUI: formatBalance(totalC, 'SUI'),
+            totalLiquidity,
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch pool reserves:', error);
+    }
+  }, [client]);
+
   const value: AmpereContextType = {
     isConfigured,
     sdk,
     client,
     balances,
+    poolReserves,
     loading,
     refreshBalances,
+    getPoolReserves,
     executeSwap,
     addLiquidity,
     removeLiquidity,

@@ -2,19 +2,22 @@
 
 import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import type { PoolReserves } from "@/contexts/ampere-context";
+import { formatBalance } from "@/lib/ampere-config";
 
 interface TriangleSelectorProps {
   mode: "liquidity" | "volume";
   onSelectPair: (pair: string) => void;
+  poolReserves?: PoolReserves | null;
 }
 
 const assets = {
-  A: { name: "USDC", color: "hsl(0, 0%, 100%)", liquidity: 45, volume: 35 },
-  B: { name: "USDT", color: "hsl(0, 0%, 100%)", liquidity: 30, volume: 40 },
-  C: { name: "SUI",  color: "hsl(0, 0%, 100%)", liquidity: 25, volume: 25 },
+  A: { name: "USDC", color: "hsl(0, 0%, 100%)" },
+  B: { name: "USDT", color: "hsl(0, 0%, 100%)" },
+  C: { name: "SUI",  color: "hsl(0, 0%, 100%)" },
 };
 
-export function TriangleSelector({ mode, onSelectPair }: TriangleSelectorProps) {
+export function TriangleSelector({ mode, onSelectPair, poolReserves }: TriangleSelectorProps) {
   const [hoveredEdge, setHoveredEdge] = useState<string | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<string | null>(null);
   const [hoveredAsset, setHoveredAsset] = useState<string | null>(null);
@@ -36,24 +39,43 @@ export function TriangleSelector({ mode, onSelectPair }: TriangleSelectorProps) 
   };
 
   const dotPosition = useMemo(() => {
-    const d =
-      mode === "liquidity"
-        ? { a: assets.A.liquidity, b: assets.B.liquidity, c: assets.C.liquidity }
-        : { a: assets.A.volume, b: assets.B.volume, c: assets.C.volume };
+    // Calculate distribution based on pool reserves
+    let a = 33.33, b = 33.33, c = 33.33; // Default equal distribution
+    
+    if (poolReserves && mode === "liquidity") {
+      // Use actual pool reserves for liquidity mode
+      const totalA = formatBalance(poolReserves.usdc, 'USDC');
+      const totalB = formatBalance(poolReserves.usdt, 'USDT');
+      const totalC = formatBalance(poolReserves.sui, 'SUI') * 2.5; // Approximate SUI value in USD
+      
+      const total = totalA + totalB + totalC;
+      
+      if (total > 0) {
+        a = (totalA / total) * 100;
+        b = (totalB / total) * 100;
+        c = (totalC / total) * 100;
+      }
+    } else if (mode === "volume") {
+      // For volume, we could track swaps - for now use a weighted distribution
+      // You can update this to track actual volume from swap events
+      a = 35;
+      b = 40;
+      c = 25;
+    }
 
-    const total = d.a + d.b + d.c;
+    const total = a + b + c;
 
     return {
       x:
-        vertices.A.x * (d.a / total) +
-        vertices.B.x * (d.b / total) +
-        vertices.C.x * (d.c / total),
+        vertices.A.x * (a / total) +
+        vertices.B.x * (b / total) +
+        vertices.C.x * (c / total),
       y:
-        vertices.A.y * (d.a / total) +
-        vertices.B.y * (d.b / total) +
-        vertices.C.y * (d.c / total),
+        vertices.A.y * (a / total) +
+        vertices.B.y * (b / total) +
+        vertices.C.y * (c / total),
     };
-  }, [mode]);
+  }, [mode, poolReserves]);
 
   const edges = [
     { id: "USDC/USDT", from: "A", to: "B", pair: "USDC/USDT" },
@@ -135,6 +157,18 @@ export function TriangleSelector({ mode, onSelectPair }: TriangleSelectorProps) 
         {Object.entries(vertices).map(([k, p]) => {
           const asset = assets[k as keyof typeof assets];
           const hovered = hoveredAsset === k;
+          
+          // Get actual reserve amounts for display
+          let reserveAmount = "";
+          if (poolReserves && mode === "liquidity") {
+            if (k === "A") {
+              reserveAmount = formatBalance(poolReserves.usdc, 'USDC').toFixed(2);
+            } else if (k === "B") {
+              reserveAmount = formatBalance(poolReserves.usdt, 'USDT').toFixed(2);
+            } else if (k === "C") {
+              reserveAmount = formatBalance(poolReserves.sui, 'SUI').toFixed(2);
+            }
+          }
 
           return (
             <g
@@ -160,6 +194,18 @@ export function TriangleSelector({ mode, onSelectPair }: TriangleSelectorProps) 
               >
                 {asset.name}
               </text>
+              {hovered && reserveAmount && (
+                <motion.text
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  x={p.x}
+                  y={p.y + 50}
+                  textAnchor="middle"
+                  className="fill-white text-xs font-medium"
+                >
+                  {reserveAmount}
+                </motion.text>
+              )}
             </g>
           );
         })}

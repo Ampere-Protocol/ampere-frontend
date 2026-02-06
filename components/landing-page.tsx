@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { TriangleSelector } from "@/components/triangle-selector";
 import { Button } from "@/components/ui/button";
+import { useAmpere } from "@/contexts/ampere-context";
 
 interface LandingPageProps {
   onSelectPair: (pair: string) => void;
@@ -11,6 +12,14 @@ interface LandingPageProps {
 
 export function LandingPage({ onSelectPair }: LandingPageProps) {
   const [mode, setMode] = useState<"liquidity" | "volume">("liquidity");
+  const { poolReserves, getPoolReserves } = useAmpere();
+
+  // Refresh pool data periodically
+  useEffect(() => {
+    getPoolReserves();
+    const interval = setInterval(getPoolReserves, 30000); // Update every 30 seconds
+    return () => clearInterval(interval);
+  }, [getPoolReserves]);
 
   return (
     <motion.div
@@ -70,7 +79,11 @@ export function LandingPage({ onSelectPair }: LandingPageProps) {
           transition={{ delay: 0.3 }}
           className="flex justify-center"
         >
-          <TriangleSelector mode={mode} onSelectPair={onSelectPair} />
+          <TriangleSelector 
+            mode={mode} 
+            onSelectPair={onSelectPair}
+            poolReserves={poolReserves}
+          />
         </motion.div>
 
         {/* Instructions */}
@@ -91,7 +104,12 @@ export function LandingPage({ onSelectPair }: LandingPageProps) {
           className="mt-12 grid grid-cols-3 gap-4"
         >
           {[
-            { label: "Total Liquidity", value: "$12.4M" },
+            { 
+              label: "Total Liquidity", 
+              value: poolReserves 
+                ? `$${poolReserves.totalLiquidity.toFixed(2)}` 
+                : "Loading..." 
+            },
             { label: "24h Volume", value: "$2.8M" },
             { label: "Active Pairs", value: "3" },
           ].map((stat) => (
