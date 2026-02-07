@@ -1,30 +1,36 @@
-# Decentralized trading interface (2)
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/e17138dc-ad9c-45ea-80ab-9b6d0e542e89" alt="ampere_logo" width="10%">
+</p>
 
-*Automatically synced with your [v0.app](https://v0.app) deployments*
+# Ampere Protocol
+### One Liquidity Pool. Unlimited Tokens. Infinite Possibilities.
 
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/bismuth01s-projects/v0-ampere-frontend)
-[![Built with v0](https://img.shields.io/badge/Built%20with-v0.app-black?style=for-the-badge)](https://v0.app/chat/6XYp5vJUMrE)
+Ampere Protocol is a multi-token pool for stablecoins inspired by the concept of [Orbital AMMs](https://www.paradigm.xyz/2025/06/orbital). The project showcases that concept with 3 stablecoin pool.
 
-## Overview
+## What are multi-token or orbital pools ?
 
-This repository will stay in sync with your deployed chats on [v0.app](https://v0.app).
-Any changes you make to your deployed app will be automatically pushed to this repository from [v0.app](https://v0.app).
+A liquidity pool (LP) is usually composed of 2 tokens and uses a curve to determine prices. Ticks can be set while providing liquidity to make sure swaps are done in particular price boundaries.
+Now, we take this 2D curve to 3 dimensions with 3 tokens. Now, the curve looks like 1/8 th of a sphere and the price is determined by a point on it. Price boundaries can be set as circles on the sphere surface and ticks can be taken as parts of the sphere.
 
-## Deployment
+This concept can be generalised and taken to N-dimensions for N tokens.
 
-Your project is live at:
+## What are the advantages of multi-token or orbital pools ?
 
-**[https://vercel.com/bismuth01s-projects/v0-ampere-frontend](https://vercel.com/bismuth01s-projects/v0-ampere-frontend)**
+Traditional LPs are compromised of 2 tokens and if we need to swap one token for another and the pool doesn't exist, multiple hops of different LPs are required.
+Existence of seperate LPs for swaps also opens arbitrage opportunity for institutions and greater possibility of MEV.
 
-## Build your app
+But, with a multi-token pool, all tokens exist in a single pool and thus no hops are needed and there are lesser opportunity of MEV.
+<img width="1580" height="547" alt="Hop_comparison" src="https://github.com/user-attachments/assets/836dceb9-a14b-4877-96b4-6533cc609755" />
 
-Continue building your app on:
+Also, if there are N tokens, there can be $^NP_2$ possible cominations of LPs which can be cluttering. But you only need one pool when using multi-token pools.
+<div style="display: flex; justify-content: space-around;">
+  <img style="width: 48%; margin: 1%;" alt="normal_permutations" src="https://github.com/user-attachments/assets/c7c99df0-c799-4131-b716-4eaa99849bbb" />
+  <img style="width: 48%; margin: 1%;" alt="ampere_permutations" src="https://github.com/user-attachments/assets/34584a98-15cb-4aed-be83-ad1a4b2891a3" />
+</div>
 
-**[https://v0.app/chat/6XYp5vJUMrE](https://v0.app/chat/6XYp5vJUMrE)**
+## Why use SUI for building multi-token pools ?
 
-## How It Works
+With multi-token pools, all swaps are about to happen with one contract and everyone will interact with it, leading to a lot of transactions.
+As each swap takes place, the prices are re-calculated for N-dimensions and thus for a sequential execution chain, it can become gas heavy and it will be easier for bots to target a single contract for MEV.
 
-1. Create and modify your project using [v0.app](https://v0.app)
-2. Deploy your chats from the v0 interface
-3. Changes are automatically pushed to this repository
-4. Vercel deploys the latest version from this repository
+Thus, SUI gives parallel execution and under 1 second block time heavily reduces these possibilities making it perfect for such revolutionary DeFi projects.
